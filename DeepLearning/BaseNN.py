@@ -10,6 +10,7 @@ import numpy as np
 from abc import ABC
 from tqdm import tqdm
 
+
 class BaseNNAbstract(ABC):
     random_state = 650
     logs_path = None
@@ -115,7 +116,7 @@ class BaseNNAbstract(ABC):
     ### Save the model ###
     def saveModel(self, sess, model_name):
         saver = tf.train.Saver()
-        save_path = saver.save(sess, self.data_path + "SavedModel\\" + model_name + ".ckpt")
+        save_path = saver.save(sess, self.data_path + "SavedModel/" + model_name + ".ckpt")
 #        print("Model saved in file: %s" % save_path)
         
     ### TEST NN MODEL WITH DATA

@@ -52,7 +52,7 @@ infer_op, _, _ = forest_graph.inference_graph(X)
 correct_prediction = tf.equal(tf.argmax(infer_op, 1), tf.cast(Y, tf.int64))
 accuracy_op = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-# Initialize the variables (i.e. assign their default value) and forest resources
+# Initialize the variables (i.e. assign their default value09) and forest resources
 init_vars = tf.group(tf.global_variables_initializer(),
     resources.initialize_resources(resources.shared_resources()))
 

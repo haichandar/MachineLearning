@@ -69,16 +69,16 @@ def main(argv):
             cv.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
             
     
-    #cv.imshow("Source", src)
-    #cv.imshow("Edges", dst)
-    #cv.imshow("Detected Lines (in red) - Standard Hough Line Transform", cdst)
-    #cv.imshow("Detected Lines (in red) - Probabilistic Line Transform", cdstP)
+    cv.imshow("Source", src)
+    cv.imshow("Edges", dst)
+    cv.imshow("Detected Lines (in red) - Standard Hough Line Transform", cdst)
+    cv.imshow("Detected Lines (in red) - Probabilistic Line Transform", cdstP)
     
-    cv.imwrite('C://Users//chandar_s//Pictures//Edges.png',dst)
+    #cv.imwrite('C://Users//chandar_s//Pictures//Edges.png',dst)
     #cv.imwrite('C://Users//chandar_s//Pictures//Standard Hough Line Transform.png',cdst)
-    cv.imwrite('C://Users//chandar_s//Pictures//Probabilistic Line Transform.png',cdstP)
+    #cv.imwrite('C://Users//chandar_s//Pictures//Probabilistic Line Transform.png',cdstP)
     
-    #cv.waitKey()
+    cv.waitKey()
     return 0
     
 if __name__ == "__main__":

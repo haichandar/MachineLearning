@@ -16,15 +16,27 @@ import numpy as np
 import pylab
 import matplotlib.pyplot as plt
 import sys
+import PIL
 
-data_path = 'E:\MLData\\'
+data_path =  os.path.abspath('E:\MLData\\')
 nn_utilities_obj = nn_utilities(data_path)
+#nn_utilities_obj.check_dir(data_path + "Logs")
+#nn_utilities_obj.check_dir(data_path + "SavedModel")
+
+letters = { 1: 'a', 2: 'b', 3: 'c', 4: 'd', 5: 'e', 6: 'f', 7: 'g', 8: 'h', 9: 'i', 10: 'j',
+11: 'k', 12: 'l', 13: 'm', 14: 'n', 15: 'o', 16: 'p', 17: 'q', 18: 'r', 19: 's', 20: 't',
+21: 'u', 22: 'v', 23: 'w', 24: 'x', 25: 'y', 26: 'z', 27: '-'}
 
 def run_test():
-    nn_utilities_obj.load_PneumothoraxDataset()
+    input_data = nn_utilities_obj.load_emnist_alphadigit_data()
+#    nn_utilities_obj.load_PneumothoraxDataset()
 #    nn_utilities_obj.load_fashion_data()
-#    nn_utilities_obj.load_mnist_digit_data()
+#    input_data = nn_utilities_obj.load_mnist_digit_data()
 #    nn_utilities_obj.prepare_digits_image_inputs()
+    print (input_data["x_train"][0])
+    print (input_data["y_train"].shape)
+    print (np.argmax(input_data["y_train"][1100]) + 1)
+    print (letters[np.argmax(input_data["y_train"][1100]) + 1])
 
 def run_fnn():
     fnn_obj = fnn(data_path)
@@ -60,18 +72,21 @@ def run_cnn():
     
     # Flag makes it run with new simplified code and does not run validation accuracy for quicker response
     legacy_run = False
-
+    training = False
+    
     ''' WE NEED THIS FOR LOOKING AT HEAT MAP OVER IMAGE'''
-    single_layer_fnn = True
-
-    ## Override the default learning rate
-    cnn_obj.learning_rate_var = 0.0001
+    single_layer_fnn = False
     
     ## GET INPUT  DATA
 #    input_data = nn_utilities_obj.prepare_digits_image_inputs()
-    input_data = nn_utilities_obj.load_mnist_digit_data()
+#    input_data = nn_utilities_obj.load_mnist_digit_data()
+    input_data = nn_utilities_obj.load_emnist_alphadigit_data()
+
 #    input_data = nn_utilities_obj.load_fashion_data()
 #    input_data = nn_utilities_obj.load_PneumothoraxDataset()
+
+    ## Override the default learning rate
+    cnn_obj.learning_rate_var = 0.0001
 
     ## 2 LAYER FNN INPUTS
     hiddenlayer_1_width = 500
@@ -87,20 +102,49 @@ def run_cnn():
     else:
         ## CREATE CNN & DNN MODEL
         optimizer, cost, accuracy, cnn_fnn_model = cnn_obj.create_simplified_model([image_height, image_width], hiddenlayer_1_width, hiddenlayer_2_width, input_data["y_train"].shape[1], single_layer_fnn)
-
-    ## TRAIN THE MODEL AND TEST PREDICTION
-    run_nn(cnn_obj, input_data, optimizer, cost, accuracy, cnn_fnn_model, "cnn\\"+input_data["name"], False)
-
+    
+    if training:
+        ## TRAIN THE MODEL AND TEST PREDICTION
+        run_nn(cnn_obj, input_data, optimizer, cost, accuracy, cnn_fnn_model, "cnn\\"+input_data["name"], True)
+    else:
+        ## RUN AM EXAMPLE AND SEE HOW PREDICTION WORKS ##
+#        images = ['Number-0.tif', 'Number-1.tif', 'Number-2.tif', 'Number-3.tif', 'Number-4.tif', 'Number-5.tif', 'Number-6.1.tif', 'Number-6.2.tif', 'Number-7.tif', 'Number-8.1.tif', 'Number-8.2.tif','Number-9.tif']
+        images = ['Number-0.tif', 'N.png']
+        
+        f, a = plt.subplots(nrows=2, ncols=int(len(images)/2), figsize=(8, 3),
+                                        sharex=True, sharey=True, squeeze=False)
+        img_nbr = 0
+        i = 0
+        for image_name in images:
+            img, prediction = test_mnist_model(model_name="cnn\\"+input_data["name"],img_name=image_name)
+            a[i][img_nbr].imshow(img, cmap='gray')
+            a[i][img_nbr].axis('off')
+            
+#            title = str(prediction)
+            title = str(letters[prediction + 1])
+            print (prediction)
+            a[i][img_nbr].set_title(title, fontsize=20)
+            img_nbr = img_nbr + 1
+            
+            ''' New row'''
+            if (img_nbr == len(images)/2):
+                i = i + 1
+                img_nbr = 0
+                
+        f.show()
+        plt.draw()
+        plt.waitforbuttonpress()
+           
 
 def run_rnn():
     rnn_obj = rnn(data_path)
 
     ## GET INPUT  DATA
-#    input_data = nn_utilities_obj.prepare_digits_image_inputs()
-    input_data = nn_utilities_obj.load_fashion_data()
+    input_data = nn_utilities_obj.prepare_digits_image_inputs()
+#    input_data = nn_utilities_obj.load_fashion_data()
 
     ## Override the default learning rate
-    rnn_obj.learning_rate_var = 0.05
+    rnn_obj.learning_rate_var = 0.0005
 
     ## Assuming it's a SQUARE IMAGE
     image_height = int(np.sqrt(input_data["x_train"].shape[1]))
@@ -127,7 +171,7 @@ def run_nn(obj, input_data, optimizer, cost, accuracy, model, model_name=None, r
     training_epochs = 10
     display_step = 100
     batch_size = 10
-    quick_training = True
+    quick_training = False
 
     print ("Starting session")
     #### TRAIN AND TEST NN
@@ -136,13 +180,13 @@ def run_nn(obj, input_data, optimizer, cost, accuracy, model, model_name=None, r
         # TRAIN
         trained_model = obj.train_model(sess, model, training_epochs, display_step, batch_size, optimizer, cost, accuracy, input_data["x_train"], input_data["x_train_4D"], input_data["y_train"], input_data["x_validation"], input_data["y_validation"], quick_training, model_name, run_validation_accuracy)
 
-        ## TEST
+        ''''' TESTING '''
         test = input_data["test"]
+
         if (test is not None):
-            data_dir = input_data["data_dir"]
 
             img_name = obj.rng.choice(test.filename)
-            filepath = os.path.join(data_dir, 'Numbers', 'Images', 'test', img_name)
+            filepath = os.path.join(data_path, 'Image', 'Numbers', 'Images', 'test', img_name)
             img = imread(filepath, flatten=True)
             # convert list to ndarray and PREP AS PER INPUT FORMAT
             x_test = np.stack(img)
@@ -158,15 +202,60 @@ def run_nn(obj, input_data, optimizer, cost, accuracy, model, model_name=None, r
             pylab.imshow(img, cmap='gray')
             pylab.axis('off')
             pylab.show()
-    print ("Ending session")
-
+        '''' TESTING END'''
+        print ("Ending session")
+        
+        
     ## DO MIT CAM Analysis to print the Heatmap
     CAM_analysis = False
     if (CAM_analysis == True):
-        load_saved_model(model_name, obj, input_data)
+        load_Pneumothorax_model(model_name, obj, input_data)
 
+def test_mnist_model(model_name, img_name):
+    filepath = os.path.join(data_path, 'Test', 'Images',  img_name)
+    
+    from PIL import Image
+    basewidth = 28
+    img = Image.open(filepath).convert('L')
+    wpercent = (basewidth / float(img.size[0]))
+    hsize = int((float(img.size[1]) * float(wpercent)))
+    img_resized = 255 - np.array(img.resize((basewidth, hsize), PIL.Image.ANTIALIAS))
 
-def load_saved_model(model_name, obj, input_data):
+    # convert list to ndarray and PREP AS PER INPUT FORMAT
+    x_test = np.stack(img_resized)
+
+    sess=tf.Session()   
+    graph = tf.get_default_graph()
+    saver = tf.train.Saver()
+    print ("Restoring Model")
+    saver.restore(sess, data_path + "SavedModel\\"+model_name+".ckpt")
+    
+    x = graph.get_tensor_by_name("x:0")
+    keep_prob = graph.get_tensor_by_name("keep_probability:0")
+    
+    #Now, access the op that you want to run. 
+    model = graph.get_tensor_by_name("fnn/fnn_Out/BiasAdd:0")
+
+    ## PREDICT AND VALIDATE
+    try:
+        x_test_1 = x_test.reshape(-1, x_test.shape[0] * x_test.shape[1])
+        feed_dict ={x:x_test_1, keep_prob:1.0}
+    except:
+        x_test_2 = x_test.reshape(-1, x_test.shape[0], x_test.shape[1])
+        feed_dict ={x:x_test_2, keep_prob:1.0}
+
+    predict = tf.argmax(model , 1)
+    with sess:
+        predicted_test = predict.eval(feed_dict)
+    
+#    print("Prediction is: ", predicted_test[0])
+#    pylab.imshow(img_resized, cmap='gray')
+#    pylab.title('Prediction is ' + str(predicted_test[0]))
+#    pylab.axis('off')
+#    pylab.show()
+    return img_resized, predicted_test[0]
+
+def load_Pneumothorax_model(model_name, obj, input_data):
     with tf.Session() as sess:
         saver = tf.train.Saver()
         print ("Restoring Model")

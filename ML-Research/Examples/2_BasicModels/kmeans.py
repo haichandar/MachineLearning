@@ -79,6 +79,7 @@ for i in range(len(idx)):
     counts[idx[i]] += mnist.train.labels[i]
 # Assign the most frequent label to the centroid
 labels_map = [np.argmax(c) for c in counts]
+
 labels_map = tf.convert_to_tensor(labels_map)
 
 # Evaluation ops

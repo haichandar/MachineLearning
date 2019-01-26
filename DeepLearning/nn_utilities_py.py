@@ -95,8 +95,13 @@ class nn_utilities:
             x_validation, y_validation = self.load_mnist(self.data_path + 'Image\MNIST_Digit_data', kind='t10k')
             return self.prep_returndata(x_train, y_train, x_validation, y_validation, "mnist_digit_data")
     
+    def load_emnist_alphadigit_data(self):
+            x_train, y_train = self.load_mnist(self.data_path + 'Image\EMINIST_EnglishLetters', kind='emnist-letters-test')
+            x_validation, y_validation = self.load_mnist(self.data_path + 'Image\EMINIST_EnglishLetters', kind='emnist-letters-test')
+            return self.prep_returndata(x_train, y_train, x_validation, y_validation, "emnist_EnglishLetters")
+        
     def prep_returndata(self, x_train, y_train, x_validation, y_validation, name="unnamed_dataset", num_of_color_channels=1,
-                        x_test=None, test=None, data_dir=None):
+                        x_test=None, test=None, data_dir=data_path):
             
             # Num of samples x [height * width * no of channels]
             if (len(x_train.shape) == 2):
@@ -142,7 +147,7 @@ class nn_utilities:
         urls = {'pneumothorax_test':'https://www.dropbox.com/s/x74ykyivipwnozs/pneumothorax_test.h5?dl=1',
                 'pneumothorax_train':'https://www.dropbox.com/s/pnwf67qzztd1slc/pneumothorax_train.h5?dl=1'}
         
-        data_dir = self.data_path + 'Image\Lung_Data\\'
+        data_dir =  os.path.abspath(self.data_path + 'Image\Lung_Data\\')
         
         for (name,url) in urls.items():
             if not os.path.isfile(data_dir+name+'.h5'):
