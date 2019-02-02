@@ -96,10 +96,33 @@ class nn_utilities:
             return self.prep_returndata(x_train, y_train, x_validation, y_validation, "mnist_digit_data")
     
     def load_emnist_alphadigit_data(self):
-            x_train, y_train = self.load_mnist(self.data_path + 'Image\EMINIST_EnglishLetters', kind='emnist-letters-test')
-            x_validation, y_validation = self.load_mnist(self.data_path + 'Image\EMINIST_EnglishLetters', kind='emnist-letters-test')
+            train = pd.read_csv(self.data_path + 'Image\emnist_alphadigit_data\emnist-balanced-train.csv', header=None)
+            test = pd.read_csv(self.data_path + 'Image\emnist_alphadigit_data\emnist-balanced-test.csv', header=None)
+
+            x_train_data, y_train = train.iloc[:, 1:].values, train.iloc[:, 0].values
+            x_validation_data, y_validation  = pd.get_dummies(test.iloc[:, 1:]), pd.get_dummies(test.iloc[:, 0])
+            x_train = np.apply_along_axis(self.rotate, 1, x_train_data)
+            x_validation = np.apply_along_axis(self.rotate, 1, x_validation_data)
+            del x_train_data, x_validation_data
+            return self.prep_returndata(x_train, y_train, x_validation, y_validation, "emnist_alpha_digit_data")
+      
+    def load_emnist_letters_data(self):
+            train = pd.read_csv(self.data_path + 'Image\EMINIST_EnglishLetters\emnist-letters-train.csv', header=None)
+            test = pd.read_csv(self.data_path + 'Image\EMINIST_EnglishLetters\emnist-letters-test.csv', header=None)
+
+            x_train_data, y_train = train.iloc[:, 1:].values, train.iloc[:, 0].values
+            x_validation_data, y_validation  = pd.get_dummies(test.iloc[:, 1:]), pd.get_dummies(test.iloc[:, 0])
+            x_train = np.apply_along_axis(self.rotate, 1, x_train_data)
+            x_validation = np.apply_along_axis(self.rotate, 1, x_validation_data)
+            del x_train_data, x_validation_data
             return self.prep_returndata(x_train, y_train, x_validation, y_validation, "emnist_EnglishLetters")
-        
+  
+    def rotate(self, image):
+        image = image.reshape([28, 28])
+        image = np.fliplr(image)
+        image = np.rot90(image)
+        return image.reshape([28 * 28])
+      
     def prep_returndata(self, x_train, y_train, x_validation, y_validation, name="unnamed_dataset", num_of_color_channels=1,
                         x_test=None, test=None, data_dir=data_path):
             
@@ -129,7 +152,7 @@ class nn_utilities:
                     y_train =  self.convert_to_onehot(y_train)
                     y_validation = self.convert_to_onehot(y_validation)
 
-            x_train, y_train, x_validation, y_validation = x_train[:15000], y_train[:15000], x_validation, y_validation
+            x_train, y_train, x_validation, y_validation = x_train, y_train, x_validation, y_validation
             
             return { "x_train" : x_train, 
                      "y_train" : y_train,

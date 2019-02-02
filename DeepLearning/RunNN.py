@@ -19,24 +19,31 @@ import sys
 import PIL
 
 data_path =  os.path.abspath('E:\MLData\\')
+#data_path =  os.path.abspath('./')+"/"
 nn_utilities_obj = nn_utilities(data_path)
-#nn_utilities_obj.check_dir(data_path + "Logs")
-#nn_utilities_obj.check_dir(data_path + "SavedModel")
 
-letters = { 1: 'a', 2: 'b', 3: 'c', 4: 'd', 5: 'e', 6: 'f', 7: 'g', 8: 'h', 9: 'i', 10: 'j',
-11: 'k', 12: 'l', 13: 'm', 14: 'n', 15: 'o', 16: 'p', 17: 'q', 18: 'r', 19: 's', 20: 't',
-21: 'u', 22: 'v', 23: 'w', 24: 'x', 25: 'y', 26: 'z', 27: '-'}
+#letters = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', 5: 'E', 6: 'F', 7: 'G', 8: 'H', 9: 'I', 10: 'J',
+#11: 'K', 12: 'L', 13: 'M', 14: 'N', 15: 'O', 16: 'P', 17: 'Q', 18: 'R', 19: 'S', 20: 'T',
+#21: 'U', 22: 'V', 23: 'W', 24: 'X', 25: 'Y', 26: 'Z', 27: '-'}
+
+alphadigit = { 0:'0', 1:'1', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 7:'7', 8:'8', 9:'9', 10:'A', 11:'B', 12:'C', 13:'D', 14:'E', 15:'F', 16:'G', 17:'H', 18:'I', 19:'J', 20:'K', 21:'L', 22:'M', 23:'N', 24:'O', 25:'P', 26:'Q', 27:'R', 28:'S', 29:'T', 30:'U', 31:'V', 32:'W', 33:'X', 34:'Y', 35:'Z', 36:'a', 37:'b', 38:'d', 39:'e', 40:'f', 41:'g', 42:'h', 43:'n', 44:'q', 45:'r', 46:'t'}
+
 
 def run_test():
+
     input_data = nn_utilities_obj.load_emnist_alphadigit_data()
+#    input_data = nn_utilities_obj.load_emnist_letters_data()
 #    nn_utilities_obj.load_PneumothoraxDataset()
 #    nn_utilities_obj.load_fashion_data()
 #    input_data = nn_utilities_obj.load_mnist_digit_data()
 #    nn_utilities_obj.prepare_digits_image_inputs()
     print (input_data["x_train"][0])
     print (input_data["y_train"].shape)
-    print (np.argmax(input_data["y_train"][1100]) + 1)
-    print (letters[np.argmax(input_data["y_train"][1100]) + 1])
+    print (alphadigit[np.argmax(input_data["y_train"][100])])
+    pylab.imshow(input_data["x_train"][100].reshape(28,28), cmap='gray')
+    pylab.axis('off')
+    pylab.show()
+#    print (letters[np.argmax(input_data["y_train"][1100]) + 1])
 
 def run_fnn():
     fnn_obj = fnn(data_path)
@@ -81,6 +88,7 @@ def run_cnn():
 #    input_data = nn_utilities_obj.prepare_digits_image_inputs()
 #    input_data = nn_utilities_obj.load_mnist_digit_data()
     input_data = nn_utilities_obj.load_emnist_alphadigit_data()
+#    input_data = nn_utilities_obj.load_emnist_letters_data()
 
 #    input_data = nn_utilities_obj.load_fashion_data()
 #    input_data = nn_utilities_obj.load_PneumothoraxDataset()
@@ -109,25 +117,33 @@ def run_cnn():
     else:
         ## RUN AM EXAMPLE AND SEE HOW PREDICTION WORKS ##
 #        images = ['Number-0.tif', 'Number-1.tif', 'Number-2.tif', 'Number-3.tif', 'Number-4.tif', 'Number-5.tif', 'Number-6.1.tif', 'Number-6.2.tif', 'Number-7.tif', 'Number-8.1.tif', 'Number-8.2.tif','Number-9.tif']
-        images = ['Number-0.tif', 'N.png']
+        import cv2
         
-        f, a = plt.subplots(nrows=2, ncols=int(len(images)/2), figsize=(8, 3),
+        cv2.imwrite("E:\MLData\Test\images\input1.jpg", 255 - input_data["x_validation"][11].reshape(28,28) )
+        cv2.imwrite("E:\MLData\Test\images\input2.jpg", 255 - input_data["x_validation"][100].reshape(28,28) )
+        cv2.imwrite("E:\MLData\Test\images\input3.jpg", 255 - input_data["x_validation"][8800].reshape(28,28) )
+        
+        print (alphadigit[np.argmax(input_data["y_validation"][11])], alphadigit[np.argmax(input_data["y_validation"][100])], alphadigit[np.argmax(input_data["y_validation"][8800])])
+        images = ["input1.jpg", "input2.jpg", "input3.jpg", 'TestSheet1_Section1_VSubSection1_HSubSection8.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection9.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection10.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection11.jpg','TestSheet1_Section1_VSubSection1_HSubSection12.jpg','TestSheet1_Section1_VSubSection1_HSubSection13.jpg','TestSheet1_Section1_VSubSection1_HSubSection14.jpg','TestSheet1_Section1_VSubSection1_HSubSection15.jpg','TestSheet1_Section1_VSubSection1_HSubSection16.jpg']
+        
+        cols_count = int(len(images)/2) + (len(images) - int(len(images)/2)*2)
+        f, a = plt.subplots(nrows=2, ncols=cols_count, figsize=(8, 3),
                                         sharex=True, sharey=True, squeeze=False)
         img_nbr = 0
         i = 0
         for image_name in images:
-            img, prediction = test_mnist_model(model_name="cnn\\"+input_data["name"],img_name=image_name)
+            img, prediction, prediction_confidence = test_mnist_model(model_name="cnn\\"+input_data["name"],img_name=image_name)
             a[i][img_nbr].imshow(img, cmap='gray')
             a[i][img_nbr].axis('off')
             
 #            title = str(prediction)
-            title = str(letters[prediction + 1])
-            print (prediction)
-            a[i][img_nbr].set_title(title, fontsize=20)
-            img_nbr = img_nbr + 1
+#            print(prediction)
+            title = str(alphadigit[prediction]) + " (" + str(int(prediction_confidence)) + "%)" 
+            a[i][img_nbr].set_title(title, fontsize=10)
+            img_nbr += 1
             
             ''' New row'''
-            if (img_nbr == len(images)/2):
+            if (img_nbr == cols_count):
                 i = i + 1
                 img_nbr = 0
                 
@@ -168,9 +184,9 @@ def run_rnn():
 
 def run_nn(obj, input_data, optimizer, cost, accuracy, model, model_name=None, run_validation_accuracy=True):
     # Python optimisation variables
-    training_epochs = 10
+    training_epochs = 5
     display_step = 100
-    batch_size = 10
+    batch_size = 200
     quick_training = False
 
     print ("Starting session")
@@ -244,16 +260,20 @@ def test_mnist_model(model_name, img_name):
         x_test_2 = x_test.reshape(-1, x_test.shape[0], x_test.shape[1])
         feed_dict ={x:x_test_2, keep_prob:1.0}
 
-    predict = tf.argmax(model , 1)
+#    predict = tf.argmax(model , 1)
+    predicted_pct = tf.nn.softmax(model) * 100
     with sess:
-        predicted_test = predict.eval(feed_dict)
-    
+#       predicted_test = predict.eval(feed_dict)
+#       predicted_values =  model.eval(feed_dict)
+       predicted_confidence =  np.round(predicted_pct.eval(feed_dict), 0)
+       predicted_test = np.argmax(predicted_confidence, 1)
+#       print (predicted_test, predicted_confidence)
 #    print("Prediction is: ", predicted_test[0])
 #    pylab.imshow(img_resized, cmap='gray')
 #    pylab.title('Prediction is ' + str(predicted_test[0]))
 #    pylab.axis('off')
 #    pylab.show()
-    return img_resized, predicted_test[0]
+    return img_resized, predicted_test[0], np.max(predicted_confidence)
 
 def load_Pneumothorax_model(model_name, obj, input_data):
     with tf.Session() as sess:
@@ -367,6 +387,7 @@ def vis_cam(image, cam, input_data, save_file=None):
 
 
 if __name__ == "__main__":
+#     sys.argv = ['','cnn']
     if len (sys.argv) != 2 :
         print ("Usage: python RunNN.py <cnn/fnn/rnn/test>")
         sys.exit (1)

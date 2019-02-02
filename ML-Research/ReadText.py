@@ -8,7 +8,7 @@ Created on Sun Nov 25 15:04:44 2018
 import cv2
 import numpy as np
 
-large = cv2.imread('C://Users//chandar_s//Pictures//TestSheet1.tif')
+large = cv2.imread('TestSheet1_Section1.jpg')
 rgb = cv2.pyrDown(large)
 small = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
 
