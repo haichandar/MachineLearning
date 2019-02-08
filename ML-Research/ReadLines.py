@@ -32,7 +32,8 @@ class ReadLines:
                 cv2.line(img,(x1,y1),(x2,y2),(255,0,0),2)
         
         return img, img_org, lines
-    
+
+       
     ''' NORMALIZE THE LINES DETECTED - MERGE CLOSER LINES AND DRAW ONE SINGLE HORIZONTAL LINE INSTEAD OF MULTIPLE SMALL LINES'''
     def Normalize_horizontal_lines(self, img_org, lines):
 
@@ -233,15 +234,171 @@ class ReadLines:
         plt.show()
 #        quit()
 
+    def AnalyzeHorizondalEdges(self, image_name, img):
+        if not image_name is None:
+            # Loading image contains lines
+            img = cv2.imread(image_name)
+
+        # Convert to grayscale
+        gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+        
+        # Apply Canny edge detection, return will be a binary image
+        edges = cv2.Canny(gray,100,200)
+        edges_density = np.sum(edges,axis=1)
+
+        # Find minimun outlier based on Interquartile Range and Outliers model
+        q75, q25 = np.percentile(edges_density, [75 ,25])
+        max_threshold = q75 + (q75 - q25) * 1.5
+        
+        new_arr = []
+        for arr in edges_density:
+           new_arr.append(0 if  arr > max_threshold else arr)
+         
+        edges_density = np.round(new_arr/np.sum(new_arr)*100,0)
+        cumulative_pixel_denst = np.cumsum(edges_density)
+        y = range(1, gray.shape[0]+1)
+
+        ## This section is to identify where the text is. where the slope changes from flat to curve        
+        previous_num  = 0
+        nochangeseen = 0
+        selected_num = 0
+        selected_index = 0
+        selected_nochangeseen = 0
+        for curr_nbr in cumulative_pixel_denst:
+            if (previous_num != curr_nbr and nochangeseen > selected_nochangeseen):
+                selected_num = curr_nbr
+                selected_index = np.where(cumulative_pixel_denst==selected_num)[0][0]
+                selected_nochangeseen = nochangeseen
+            
+            nochangeseen += 1 if (previous_num == curr_nbr) else -nochangeseen
+            previous_num = curr_nbr
+          
+#        print (f"Selected num {selected_num/10} and index is {selected_index}")
+        
+        cropped_new_image = img[selected_index - 10:]
+        
+#        fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=1, ncols=4,  figsize=(8, 3))
+#        fig, (ax3, ax4) = plt.subplots(nrows=1, ncols=2,  figsize=(8, 3))
+
+#        ax1.imshow(edges, cmap=plt.cm.hot)
+#        ax1.set_title('Edge Detection', fontsize=20)
+        
+#        ax2.invert_yaxis()
+#        ax2.plot(edges_density, y)
+#        ax2.plot(cumulative_pixel_denst/10, y)
+#        ax2.set_title('Density of pixels', fontsize=20)
+        
+#        ax3.imshow(img, cmap=plt.cm.gray)
+#        ax3.set_title('Original Image', fontsize=20)
+#        
+#        ax4.imshow(cropped_new_image, cmap=plt.cm.gray)
+#        ax4.set_title('New Image', fontsize=20)
+#        
+#        fig.tight_layout()
+        
+#        plt.show()
+        
+#        plt.imshow(cropped_new_image)
+#        plt.show()
+        
+        ''' HOW TO CROP THE IMAGE INTO LETTERS '''
+        cropped_new_image = self.AnalyzeVerticalEdges(None, cropped_new_image)
+        return cropped_new_image
+
+
+    def AnalyzeVerticalEdges(self, image_name, img):
+        if not image_name is None:
+            # Loading image contains lines
+            img = cv2.imread(image_name)
+
+        # Convert to grayscale and remove noise
+        nose_removed_img = cv2.fastNlMeansDenoisingColored(img,None,10,10,7,21)
+        
+        gray = cv2.cvtColor(nose_removed_img,cv2.COLOR_BGR2GRAY)
+        # Apply Canny edge detection, return will be a binary image
+        edges = cv2.Canny(gray,100,200)
+        edges_density = np.sum(edges,axis=0)
+
+        # Find minimun outlier based on Interquartile Range and Outliers model
+        q75, q25 = np.percentile(edges_density, [75 ,25])
+        max_threshold = q75 + (q75 - q25) * 1.5
+        min_threshold = q25 - (q75 - q25) * 1.5
+        
+#        print (f'min_threshold:{min_threshold} q25:{q25} q75:{q75}')
+        new_arr = []
+        med = np.mean(edges_density, axis=0)
+        contour_area = []
+        start_x = -1
+        end_x = -1
+        y = img.shape[0]
+        analyzing = False
+        images_for_prediction = []
+        for arr in edges_density:
+#           new_arr.append(0 if  arr < min_threshold else (0 if  arr > max_threshold else arr))
+           new_arr.append(med if  arr > max_threshold else arr)
+#           new_arr.append(arr)
+           current_index = len(new_arr) - 1
+           ''' Trying to check if my total density is below threshol, if so, consider it as a white space'''
+           if new_arr[current_index] < 1000:
+#               cv2.line(img,(current_index,0),(current_index,img.shape[0]),(255,0,0),2)
+               
+               ''' Mark the starting and ending points'''
+               if analyzing:
+                   area = (end_x - start_x) * y
+#                   print (area)
+                   if area > 500:
+                       contour_area.append([start_x, 0,end_x,y])
+                       cv2.rectangle(img, (start_x, 5), (end_x - 1, y-10), (255, 0, 0), 2)
+                       images_for_prediction.append(gray[start_x:end_x,  0:y])
+                   analyzing = False
+
+               end_x = -1
+               start_x  = current_index
+           else:
+               ''' Mark the starting and ending points'''
+               analyzing = True
+               ''' Reset variables '''
+               end_x = current_index
+
+        y = range(1, gray.shape[1]+1)
+
+
+        
+#        fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3,  figsize=(8, 3))
+        fig, (ax2, ax3, ax4) = plt.subplots(nrows=3, ncols=1,  figsize=(100, 30))
+
+#        ax1.imshow(edges, cmap=plt.cm.hot)
+#        ax1.set_title('Edge Detection', fontsize=20)
+#        
+#        
+        ax2.plot(y, new_arr)
+##        ax2.plot(cumulative_pixel_denst, y)
+        ax2.set_title('Density of pixels', fontsize=20)
+#        
+        ax3.imshow(img, cmap=plt.cm.gray)
+        ax3.set_title('Detected contours', fontsize=20)
+        
+        ax4.imshow(gray, cmap=plt.cm.gray)
+        ax4.set_title('Original Gray Image', fontsize=20)
+        
+#        fig.tight_layout()
+        plt.show()
+        
+#        print (len(images_for_prediction))
+        return images_for_prediction
+    
 if __name__ == "__main__":
     readLineObj = ReadLines()
     
 #    img_array = ['TestSheet1_Section1.jpg', 'TestSheet1_Section2.jpg', 'TestSheet1_Section3.jpg','TestSheet1_Section4.jpg','TestSheet1_Section5.jpg',
 #                 'TestSheet2_Section1.jpg', 'TestSheet2_Section2.jpg', 'TestSheet2_Section3.jpg','TestSheet2_Section4.jpg','TestSheet2_Section5.jpg']
-    img_array = ['TestSheet1_Section3.jpg']
-    
+    img_array = ['TestSheet1_Section1_SubSection1.jpg', 'TestSheet1_Section1_SubSection2.jpg', 'TestSheet1_Section1_SubSection3.jpg', 'TestSheet1_Section1_SubSection4.jpg', 'TestSheet1_Section1_SubSection5.jpg']
+#    img_array = ['TestSheet1_Section1_SubSection5.jpg']
+
     for img_name in img_array:
-        img, img_org, lines = readLineObj.DetectEdgesAndLines(img_name, None)
-        horiz_coords = readLineObj.Normalize_horizontal_lines(img_org, lines)
+#        img, img_org, lines = readLineObj.DetectEdgesAndLines(img_name, None)
+#        horiz_coords = readLineObj.Normalize_horizontal_lines(img_org, lines)
 #        vert_coords = readLineObj.Normalize_vertical_lines(img_org, lines)
-        readLineObj.Draw_plots(img, img_org)
+#        readLineObj.Draw_plots(img, img_org)
+        
+        cropped_images = readLineObj.AnalyzeHorizondalEdges(img_name, None)

@@ -6,15 +6,17 @@ Created on Tue Jan 22 09:58:53 2019
 """
 
 import cv2
-#import sys
+import sys
 import numpy as np
 import copy
-
-#sys.path.insert(0, '..\ML-Research')
 from ReadLines import ReadLines
+
+sys.path.insert(0, '..\DeepLearning')
+from cnn import cnn
 
 readLineObj = ReadLines()
 img = cv2.imread("C:\\Users\\chandar_s\\Pictures\\TestSheet1.tif")
+FileName = "TestSheet1"
 
 def FindContour(img):
     rgb = cv2.pyrDown(img)
@@ -45,16 +47,62 @@ def FindContour(img):
     cv2.imshow('rects', rgb)
     cv2.waitKey()
 
+
+def DoLetterPrediction(image_array):
+    data_path = 'E:\MLData\\'
+    cnn_obj = cnn(data_path)
+
+    single_layer_fnn = False
+    
+    ## Override the default learning rate
+    cnn_obj.learning_rate_var = 0.0001
+
+    ## 2 LAYER FNN INPUTS
+    hiddenlayer_1_width = 500
+    hiddenlayer_2_width = 500
+
+    ## Assuming it's a SQUARE IMAGE
+    image_height = 28
+    image_width = 28
+    
+    ## CREATE CNN & DNN MODEL
+    optimizer, cost, accuracy, cnn_fnn_model = cnn_obj.create_simplified_model([image_height, image_width], hiddenlayer_1_width, hiddenlayer_2_width, None, single_layer_fnn)
+    
+        
+    images = ["input1.jpg", "input2.jpg", "input3.jpg", 'TestSheet1_Section1_VSubSection1_HSubSection8.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection9.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection10.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection11.jpg','TestSheet1_Section1_VSubSection1_HSubSection12.jpg','TestSheet1_Section1_VSubSection1_HSubSection13.jpg','TestSheet1_Section1_VSubSection1_HSubSection14.jpg','TestSheet1_Section1_VSubSection1_HSubSection15.jpg','TestSheet1_Section1_VSubSection1_HSubSection16.jpg']
+    
+    cols_count = int(len(images)/2) + (len(images) - int(len(images)/2)*2)
+    f, a = plt.subplots(nrows=2, ncols=cols_count, figsize=(8, 3),
+                                    sharex=True, sharey=True, squeeze=False)
+    img_nbr = 0
+    i = 0
+    for image_name in images:
+        img, prediction, prediction_confidence = test_mnist_model(model_name="cnn\\"+input_data["name"],img_name=image_name)
+        a[i][img_nbr].imshow(img, cmap='gray')
+        a[i][img_nbr].axis('off')
+        
+#            title = str(prediction)
+#            print(prediction)
+        title = str(alphadigit[prediction]) + " (" + str(int(prediction_confidence)) + "%)" 
+        a[i][img_nbr].set_title(title, fontsize=10)
+        img_nbr += 1
+        
+        ''' New row'''
+        if (img_nbr == cols_count):
+            i = i + 1
+            img_nbr = 0
+            
+    f.show()
+    plt.draw()
+    plt.waitforbuttonpress()
+
 height, width = img.shape[:2]
+## divide the entire sheet by 5 x 2 starting from 150 y position
 w_start = 0
 h_start = 150
 h_step_size = int(height/5)
 w_step_size = int(width/2)
 
-# Define config parameters.
-# '-l eng'  for using the English language
-# '--oem 1' for using LSTM OCR Engine
-config = ('-l eng --oem 1 --psm 3')
 image_count = 1
 for w_current in range(w_start, width, w_step_size) :
     ## BREAK BY EACH BOX
@@ -63,7 +111,7 @@ for w_current in range(w_start, width, w_step_size) :
         crop_img = img[h_current:h_current + h_step_size, 
                        w_current  :w_current   + w_step_size]
 
-        cv2.imwrite( "TestSheet2_Section"+str(image_count) +".jpg", crop_img );
+        cv2.imwrite( f"{FileName}_Section{image_count}.jpg", crop_img );
         
         # Find the vertical crop co-ordinates
         img_subsection, img_subsection_withlines, lines = readLineObj.DetectEdgesAndLines(None, copy.deepcopy(crop_img))
@@ -75,6 +123,7 @@ for w_current in range(w_start, width, w_step_size) :
         minimum_vertical_area_threshold = 20000 if  minimum_vertical_area_threshold < 0 else minimum_vertical_area_threshold
         print (f"minimum_vertical_area_threshold {minimum_vertical_area_threshold}")
 
+        image_Vsection_count = 0
         print ("   ~~START VERTICAL AREA~~")
         for x1, y1, x2, y2, area in vert_coords:
             print (f'     Vertical split -> x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}, area:{area}')
@@ -103,10 +152,16 @@ for w_current in range(w_start, width, w_step_size) :
                         continue
                     print (f'    Horizontal split -> x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}, area:{area}')
                     cropped_horizondal_image = cropped_vertical_image[y1: y2 + 10, x1:x2]
-                    FindContour(cropped_horizondal_image)
+                    cv2.imwrite( f"{FileName}_Section{image_count}_SubSection{image_Vsection_count}.jpg", cropped_horizondal_image)
+                    image_Vsection_count+=1
+#                    FindContour(cropped_horizondal_image)
+                    ''' Break images into sections and send for prediction'''
+                    images_for_analysis = readLineObj.AnalyzeHorizondalEdges(None, cropped_horizondal_image)
             else:
                 print("    No Horizontal lines detected. Skipping...")
         break
+        image_count += 1;
+
     break
 
 
