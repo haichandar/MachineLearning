@@ -85,7 +85,7 @@ class fnn(BaseNNAbstract):
 
     def create_simplified_model(self, input_x, input_features, n_hidden_1, n_hidden_2, output_classes, single_layer_fnn= False):
         
-        with tf.name_scope('fnn'):
+        with tf.variable_scope('fnn', reuse=tf.AUTO_REUSE):
             if single_layer_fnn:
                 input_x = tf.reduce_mean(input_x, [1,2])
                 # define the only connected layer
@@ -101,14 +101,14 @@ class fnn(BaseNNAbstract):
                 # define third fully connected layer
                 model = tf.layers.dense(inputs=dropout2, units=output_classes, kernel_initializer=tf.initializers.lecun_normal(), use_bias=True, bias_initializer=tf.zeros_initializer(), name="fnn_Out") 
     
-        with tf.name_scope('xent'):
+        with tf.variable_scope('xent', reuse=tf.AUTO_REUSE):
             cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=model, labels=self.y))
-        with tf.name_scope('train'):
+        with tf.variable_scope('train', reuse=tf.AUTO_REUSE):
             if single_layer_fnn:
                 optimizer = tf.train.MomentumOptimizer(self.learning_rate_var, 0.9, use_nesterov=True).minimize(cost)
             else:
                 optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_var).minimize(cost)
-        with tf.name_scope('Accuracy'):
+        with tf.variable_scope('Accuracy', reuse=tf.AUTO_REUSE):
             # Accuracy
             acc = tf.equal(tf.argmax(model, 1), tf.argmax(self.y, 1))
             acc = tf.reduce_mean(tf.cast(acc, tf.float32))*100

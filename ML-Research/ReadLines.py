@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
+from PIL import Image, ImageOps
 import copy 
 
 class ReadLines:
@@ -234,6 +236,7 @@ class ReadLines:
         plt.show()
 #        quit()
 
+    ''' THIS FUNCTION CROPS THE IMAGE HORIZONTALLY TO JUST TEXT'''
     def AnalyzeHorizondalEdges(self, image_name, img):
         if not image_name is None:
             # Loading image contains lines
@@ -256,7 +259,6 @@ class ReadLines:
          
         edges_density = np.round(new_arr/np.sum(new_arr)*100,0)
         cumulative_pixel_denst = np.cumsum(edges_density)
-        y = range(1, gray.shape[0]+1)
 
         ## This section is to identify where the text is. where the slope changes from flat to curve        
         previous_num  = 0
@@ -277,6 +279,7 @@ class ReadLines:
         
         cropped_new_image = img[selected_index - 10:]
         
+#        y = range(1, gray.shape[0]+1)
 #        fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=1, ncols=4,  figsize=(8, 3))
 #        fig, (ax3, ax4) = plt.subplots(nrows=1, ncols=2,  figsize=(8, 3))
 
@@ -306,6 +309,7 @@ class ReadLines:
         return cropped_new_image
 
 
+    ''' ANALYZE THE VERTICAL EDGES AND SPLIT THE IMAGE INTO TEXT - IDENTIFY CONTOURS'''
     def AnalyzeVerticalEdges(self, image_name, img):
         if not image_name is None:
             # Loading image contains lines
@@ -334,11 +338,9 @@ class ReadLines:
         analyzing = False
         images_for_prediction = []
         for arr in edges_density:
-#           new_arr.append(0 if  arr < min_threshold else (0 if  arr > max_threshold else arr))
            new_arr.append(med if  arr > max_threshold else arr)
-#           new_arr.append(arr)
            current_index = len(new_arr) - 1
-           ''' Trying to check if my total density is below threshol, if so, consider it as a white space'''
+           ''' Trying to check if my total density is below threshold(1000), if so, consider it as a white space'''
            if new_arr[current_index] < 1000:
 #               cv2.line(img,(current_index,0),(current_index,img.shape[0]),(255,0,0),2)
                
@@ -346,10 +348,36 @@ class ReadLines:
                if analyzing:
                    area = (end_x - start_x) * y
 #                   print (area)
+                   ''' Check if area is more than threshold (500)'''
                    if area > 500:
                        contour_area.append([start_x, 0,end_x,y])
                        cv2.rectangle(img, (start_x, 5), (end_x - 1, y-10), (255, 0, 0), 2)
-                       images_for_prediction.append(gray[start_x:end_x,  0:y])
+
+                       ''' START THE PROCESS TO MAKE IT A SQUARE BY PADDING '''
+                       destination_image_size = 28
+                       pre_image = 255 - gray[0:y, start_x:end_x]
+                       height, width = pre_image.shape
+                       size = height if height > width else width
+                       size = destination_image_size if size < destination_image_size else destination_image_size*int(size/destination_image_size + 1)
+                       
+                       padding_top = int((size - height) / 2)
+                       padding_bottom = size - height - padding_top
+                       padding_left = int((size - width) / 2)
+                       padding_right = size - width - padding_left
+                       padded_image = np.pad(pre_image, ((padding_top,padding_bottom),(padding_left,padding_right )), 'constant')
+                       
+                        
+                       # normalize image to range [0,255]
+#                       minv = np.amin(padded_image)
+#                       maxv = np.amax(padded_image)
+#                       padded_image = (255 * (padded_image - minv) / (maxv - minv)).astype(np.uint8)
+#
+                       padded_image[padded_image > 150] = 255
+                       
+                       ''' Resizing to desired size '''
+                       padded_image = Image.fromarray(padded_image)
+                       fit_and_resized_image = ImageOps.fit(padded_image, (destination_image_size, destination_image_size), Image.ANTIALIAS)
+                       images_for_prediction.append(fit_and_resized_image)
                    analyzing = False
 
                end_x = -1
@@ -362,10 +390,11 @@ class ReadLines:
 
         y = range(1, gray.shape[1]+1)
 
+        return images_for_prediction
 
         
 #        fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3,  figsize=(8, 3))
-        fig, (ax2, ax3, ax4) = plt.subplots(nrows=3, ncols=1,  figsize=(100, 30))
+'''        fig, (ax2, ax3, ax4) = plt.subplots(nrows=3, ncols=1,  figsize=(100, 30))
 
 #        ax1.imshow(edges, cmap=plt.cm.hot)
 #        ax1.set_title('Edge Detection', fontsize=20)
@@ -383,9 +412,8 @@ class ReadLines:
         
 #        fig.tight_layout()
         plt.show()
-        
+   '''     
 #        print (len(images_for_prediction))
-        return images_for_prediction
     
 if __name__ == "__main__":
     readLineObj = ReadLines()

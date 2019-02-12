@@ -154,7 +154,7 @@ class cnn(fnn):
 #            optimizer, cost, acc, cnn_fnn_model = super().create_simplified_model(self.cnn_output, cnn_layer2_filter_count, n_hidden_1, n_hidden_2, output_classes, single_layer_fnn)
 
         else:
-            with tf.name_scope('cnn'):
+            with tf.variable_scope('cnn', reuse=tf.AUTO_REUSE):
                # first convolutional layer
                 conv1 = tf.layers.conv2d(inputs=x_standardized, filters=cnn_layer1_filter_count, kernel_size=cnn_layer1_filter_shape, kernel_initializer=tf.initializers.lecun_normal(), use_bias=True, bias_initializer=tf.zeros_initializer(), activation=tf.nn.relu, name='CNN_Layer1')
                 # first pooling layer
