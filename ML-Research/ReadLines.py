@@ -13,31 +13,35 @@ class ReadLines:
             # Loading image contains lines
             img = cv2.imread(image_name)
 
+        ## Deep copy to draw detected lines
+        img_original = copy.deepcopy(img)
+
         # Convert to grayscale
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+#        ret,thresh_img = cv2.threshold(gray,200,255,cv2.THRESH_BINARY)
+        thresh_img = cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,11,2)
+        img_edges = copy.deepcopy(thresh_img)
         
         # Apply Canny edge detection, return will be a binary image
-        edges = cv2.Canny(gray,100,200)
+        edges = cv2.Canny(thresh_img,100,200)
         
         # Apply HoughLines Probablistic detection of lines
         minLineLength = 100
         maxLineGap = 10
         lines = cv2.HoughLinesP(edges,1,np.pi/180,50,minLineLength,maxLineGap)
 
-        ## Deep copy to draw detected lines
-        img_org = copy.deepcopy(img)
 
         ## Draw initial detected lines and then finetune
         if not lines is None:
             for line in lines:
                 x1,y1,x2,y2 = line[0]
-                cv2.line(img,(x1,y1),(x2,y2),(255,0,0),2)
+                cv2.line(img_edges,(x1,y1),(x2,y2),(255,0,0),2)
         
-        return img, img_org, lines
+        return img_edges, img_original, lines
 
        
-    ''' NORMALIZE THE LINES DETECTED - MERGE CLOSER LINES AND DRAW ONE SINGLE HORIZONTAL LINE INSTEAD OF MULTIPLE SMALL LINES'''
-    def Normalize_horizontal_lines(self, img_org, lines):
+    ''' OPTIMIZE THE LINES DETECTED - MERGE CLOSER LINES AND DRAW ONE SINGLE HORIZONTAL LINE INSTEAD OF MULTIPLE SMALL LINES'''
+    def Find_Horizontal_Lines(self, img_org, lines):
 
         ''' Hyper Parameters'''
         v_step = 3
@@ -130,8 +134,8 @@ class ReadLines:
 
         return return_coord, return_area
     
-    ''' NORMALIZE THE LINES DETECTED - MERGE CLOSER LINES AND DRAW ONE SINGLE HORIZONTAL LINE INSTEAD OF MULTIPLE SMALL LINES'''
-    def Normalize_vertical_lines(self, img_org, lines):
+    ''' OPTIMIZE THE LINES DETECTED - MERGE CLOSER LINES AND DRAW ONE SINGLE HORIZONTAL LINE INSTEAD OF MULTIPLE SMALL LINES'''
+    def Find_Vertical_Lines(self, img_org, lines):
 
         ''' Hyper Parameters'''
         h_step = 3
@@ -216,18 +220,18 @@ class ReadLines:
         return  return_coord, return_area      
     
     '''' WRITE THE DATA TO OUTPUT IMAGE AND SHOW THE DETAILS IN PLOT'''    
-    def Draw_plots(self, img, img_org):
+    def Draw_plots(self, img_withEdges, img_withLines):
         cv2.imwrite('houghlines-output.jpg',img_org)
 
         # display results
         fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(8, 3),
                                             sharex=True, sharey=True)
         
-        ax1.imshow(img_org, cmap=plt.cm.gray)
+        ax1.imshow(img_withLines, cmap=plt.cm.gray)
         ax1.axis('off')
         ax1.set_title('Enhanced Detection', fontsize=20)
         
-        ax2.imshow(img, cmap=plt.cm.gray)
+        ax2.imshow(img_withEdges, cmap=plt.cm.gray)
         ax2.axis('off')
         ax2.set_title('Original Detection', fontsize=20)
         
@@ -236,17 +240,20 @@ class ReadLines:
         plt.show()
 #        quit()
 
-    ''' THIS FUNCTION CROPS THE IMAGE HORIZONTALLY TO JUST TEXT'''
-    def AnalyzeHorizondalEdges(self, image_name, img):
+    ''' THIS FUNCTION CROPS THE IMAGE HORIZONTALLY TO ELIMINATE UNNECESSARY PADDING BUT JUST TEXT'''
+    def AnalyzeAndCropImages(self, image_name, img):
         if not image_name is None:
             # Loading image contains lines
             img = cv2.imread(image_name)
 
         # Convert to grayscale
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+#        ret,thresh_img = cv2.threshold(gray,200,255,cv2.THRESH_BINARY)
+        thresh_img = cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,11,2)
+
         
         # Apply Canny edge detection, return will be a binary image
-        edges = cv2.Canny(gray,100,200)
+        edges = cv2.Canny(thresh_img,100,200)
         edges_density = np.sum(edges,axis=1)
 
         # Find minimun outlier based on Interquartile Range and Outliers model
@@ -305,12 +312,12 @@ class ReadLines:
 #        plt.show()
         
         ''' HOW TO CROP THE IMAGE INTO LETTERS '''
-        cropped_new_image = self.AnalyzeVerticalEdges(None, cropped_new_image)
-        return cropped_new_image
+        images_for_prediction = self.DetectLettersInImages(None, cropped_new_image)
+        return images_for_prediction
 
 
     ''' ANALYZE THE VERTICAL EDGES AND SPLIT THE IMAGE INTO TEXT - IDENTIFY CONTOURS'''
-    def AnalyzeVerticalEdges(self, image_name, img):
+    def DetectLettersInImages(self, image_name, img):
         if not image_name is None:
             # Loading image contains lines
             img = cv2.imread(image_name)
@@ -319,8 +326,12 @@ class ReadLines:
         nose_removed_img = cv2.fastNlMeansDenoisingColored(img,None,10,10,7,21)
         
         gray = cv2.cvtColor(nose_removed_img,cv2.COLOR_BGR2GRAY)
+#        ret,gray = cv2.threshold(gray,200,255,cv2.THRESH_BINARY)
+        gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
+
         # Apply Canny edge detection, return will be a binary image
         edges = cv2.Canny(gray,100,200)
+        
         edges_density = np.sum(edges,axis=0)
 
         # Find minimun outlier based on Interquartile Range and Outliers model
@@ -337,11 +348,35 @@ class ReadLines:
         y = img.shape[0]
         analyzing = False
         images_for_prediction = []
+
+        '''BEGIN: HYPER PARAMETERS HARDCODED TODAY TO FILTER AND MAKE DECISIONS'''
+        mean_gap = 0
+        max_whitespace_density = 1000
+        min_contour_area = 500
+        '''END: HYPER PARAMETERS HARDCODED TODAY TO FILTER AND MAKE DECISIONS'''
+        
+        ''' ADJUST THE DENSITY TO AN ACCEPTABLE RANGE'''
         for arr in edges_density:
-           new_arr.append(med if  arr > max_threshold else arr)
+           new_val = 0.
+           if  arr > max_threshold:
+                new_val = med
+           else:
+                ''' TRY TO DO MEAN OF NEIGHBORING POINTS TO STRENGTHEN THE WEAK DENSITY POINTS 
+                AND TO AVOID MARKING AS WHITE SPACE'''
+                index = len(new_arr)
+                
+                sum_arr = [] 
+                for i in range(index - mean_gap, index + mean_gap + 1):
+                    if i >= 0 and i < len(edges_density):
+                        sum_arr.append(edges_density[i])
+                new_val = int(np.mean(sum_arr))
+#                print (f"oldval:{arr} and newval:{new_val}")
+
+           new_arr.append(new_val if new_val > arr else arr)
            current_index = len(new_arr) - 1
+           
            ''' Trying to check if my total density is below threshold(1000), if so, consider it as a white space'''
-           if new_arr[current_index] < 1000:
+           if new_arr[current_index] < max_whitespace_density:
 #               cv2.line(img,(current_index,0),(current_index,img.shape[0]),(255,0,0),2)
                
                ''' Mark the starting and ending points'''
@@ -349,13 +384,13 @@ class ReadLines:
                    area = (end_x - start_x) * y
 #                   print (area)
                    ''' Check if area is more than threshold (500)'''
-                   if area > 500:
-                       contour_area.append([start_x, 0,end_x,y])
-                       cv2.rectangle(img, (start_x, 5), (end_x - 1, y-10), (255, 0, 0), 2)
+                   if area > min_contour_area:
+                       contour_area.append([start_x - 1, 5,end_x + 1,y - 10])
+                       cv2.rectangle(img, (start_x - 1, 5), (end_x + 1, y - 10), (255, 0, 0), 2)
 
                        ''' START THE PROCESS TO MAKE IT A SQUARE BY PADDING '''
                        destination_image_size = 28
-                       pre_image = 255 - gray[0:y, start_x:end_x]
+                       pre_image = 255 - gray[5:y - 10, start_x - 1:end_x + 1]
                        height, width = pre_image.shape
                        size = height if height > width else width
                        size = destination_image_size if size < destination_image_size else destination_image_size*int(size/destination_image_size + 1)
@@ -372,11 +407,19 @@ class ReadLines:
 #                       maxv = np.amax(padded_image)
 #                       padded_image = (255 * (padded_image - minv) / (maxv - minv)).astype(np.uint8)
 #
-                       padded_image[padded_image > 150] = 255
+#                       padded_image[padded_image > 150] = 255
+#                       ret,padded_image = cv2.threshold(padded_image,200,255,cv2.THRESH_BINARY)
+
                        
                        ''' Resizing to desired size '''
                        padded_image = Image.fromarray(padded_image)
                        fit_and_resized_image = ImageOps.fit(padded_image, (destination_image_size, destination_image_size), Image.ANTIALIAS)
+                       
+                       ''' CONVERT THE PIL IMAGE TO ARRAY FOR EASY MANIPULATION AND CONVERT TO BINARY'''
+#                       fit_and_resized_image = cv2.adaptiveThreshold \
+#                       (np.array(fit_and_resized_image),255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,22,2)
+#                       _, fit_and_resized_image  = cv2.threshold(np.array(fit_and_resized_image),150,255,cv2.THRESH_BINARY)
+
                        images_for_prediction.append(fit_and_resized_image)
                    analyzing = False
 
@@ -387,14 +430,14 @@ class ReadLines:
                analyzing = True
                ''' Reset variables '''
                end_x = current_index
+        
+        images_return = np.stack(images_for_prediction) if len(images_for_prediction) > 0 else []
+        return images_return
 
         y = range(1, gray.shape[1]+1)
-
-        return images_for_prediction
-
         
 #        fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3,  figsize=(8, 3))
-'''        fig, (ax2, ax3, ax4) = plt.subplots(nrows=3, ncols=1,  figsize=(100, 30))
+        fig, (ax2, ax3, ax4) = plt.subplots(nrows=3, ncols=1,  figsize=(100, 30))
 
 #        ax1.imshow(edges, cmap=plt.cm.hot)
 #        ax1.set_title('Edge Detection', fontsize=20)
@@ -407,26 +450,30 @@ class ReadLines:
         ax3.imshow(img, cmap=plt.cm.gray)
         ax3.set_title('Detected contours', fontsize=20)
         
-        ax4.imshow(gray, cmap=plt.cm.gray)
+        img_temp = gray if len(images_return) == 0 else images_return[0]
+#        print (img_temp)
+        ax4.imshow(img_temp, cmap=plt.cm.gray)
         ax4.set_title('Original Gray Image', fontsize=20)
         
 #        fig.tight_layout()
         plt.show()
-   '''     
-#        print (len(images_for_prediction))
-    
+        return images_return
+
+            
 if __name__ == "__main__":
     readLineObj = ReadLines()
     
-#    img_array = ['TestSheet1_Section1.jpg', 'TestSheet1_Section2.jpg', 'TestSheet1_Section3.jpg','TestSheet1_Section4.jpg','TestSheet1_Section5.jpg',
-#                 'TestSheet2_Section1.jpg', 'TestSheet2_Section2.jpg', 'TestSheet2_Section3.jpg','TestSheet2_Section4.jpg','TestSheet2_Section5.jpg']
-    img_array = ['TestSheet1_Section1_SubSection1.jpg', 'TestSheet1_Section1_SubSection2.jpg', 'TestSheet1_Section1_SubSection3.jpg', 'TestSheet1_Section1_SubSection4.jpg', 'TestSheet1_Section1_SubSection5.jpg']
-#    img_array = ['TestSheet1_Section1_SubSection5.jpg']
+#    img_array = ['Images/TestSheet2_Section1.jpg', 'Images/TestSheet2_Section2.jpg', 'Images/TestSheet2_Section3.jpg','Images/TestSheet2_Section4.jpg','Images/TestSheet2_Section5.jpg',
+#                 'Images/TestSheet2_Section1.jpg', 'Images/TestSheet2_Section2.jpg', 'Images/TestSheet2_Section3.jpg','Images/TestSheet2_Section4.jpg','Images/TestSheet2_Section5.jpg']
+    img_array = ['Images/TestSheet2_Section1_SubSection1.jpg', 'Images/TestSheet2_Section1_SubSection2.jpg', 'Images/TestSheet2_Section1_SubSection3.jpg', 'Images/TestSheet2_Section1_SubSection4.jpg', 'Images/TestSheet2_Section1_SubSection5.jpg']
+#    img_array = ['Images/TestSheet1_Section1_SubSection1.jpg', 'Images/TestSheet1_Section1_SubSection2.jpg', 'Images/TestSheet1_Section1_SubSection3.jpg', 'Images/TestSheet1_Section1_SubSection4.jpg', 'Images/TestSheet1_Section1_SubSection5.jpg']
+
+#    img_array = ['Images/TestSheet2_Section1_SubSection1.jpg']
 
     for img_name in img_array:
-#        img, img_org, lines = readLineObj.DetectEdgesAndLines(img_name, None)
-#        horiz_coords = readLineObj.Normalize_horizontal_lines(img_org, lines)
-#        vert_coords = readLineObj.Normalize_vertical_lines(img_org, lines)
-#        readLineObj.Draw_plots(img, img_org)
+#        img_withEdges, img_org, lines = readLineObj.DetectEdgesAndLines(img_name, None)
+#        horiz_coords = readLineObj.Find_Horizontal_Lines(img_org, lines)
+#        vert_coords = readLineObj.Find_Vertical_Lines(img_org, lines)
+#        readLineObj.Draw_plots(img_withEdges, img_org)
         
-        cropped_images = readLineObj.AnalyzeHorizondalEdges(img_name, None)
+        cropped_images = readLineObj.AnalyzeAndCropImages(img_name, None)

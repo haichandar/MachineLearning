@@ -18,48 +18,16 @@ sys.path.insert(0, '..\DeepLearning')
 from cnn import cnn
 
 readLineObj = ReadLines()
-img = cv2.imread("C:\\Users\\chandar_s\\Pictures\\TestSheet1.tif")
-FileName = "TestSheet1"
+img = cv2.imread("C:\\Users\\chandar_s\\Pictures\\TestSheet2.tif")
+FileName = "TestSheet2"
 
-def test_mnist_model(img):
+
+def PredictImages(x_test):
     # convert list to ndarray and PREP AS PER INPUT FORMAT
-#    print (type(img))
-    x_test = np.array(img)
-
-    sess=tf.Session()
-    graph = tf.get_default_graph()
-    saver = tf.train.Saver()
-    model_path="E:\\MLData\\SavedModel\\cnn\\emnist_alpha_digit_data.ckpt"
-    saver.restore(sess, model_path)
-    print ("Restored Model")
-
-    #Now, access the op that you want to run.
-    x = graph.get_tensor_by_name("x:0")
-    keep_prob = graph.get_tensor_by_name("keep_probability:0")
-    model = graph.get_tensor_by_name("fnn/fnn_Out/BiasAdd:0")
-
-
-    ## PREDICT AND VALIDATE
-    try:
-        x_test_1 = x_test.reshape(-1, x_test.shape[0] * x_test.shape[1])
-        feed_dict ={x:x_test_1, keep_prob:1.0}
-    except:
-        x_test_2 = x_test.reshape(-1, x_test.shape[0], x_test.shape[1])
-        feed_dict ={x:x_test_2, keep_prob:1.0}
-
-    predicted_pct = tf.nn.softmax(model) * 100
-    with sess:
-       predicted_confidence =  np.round(predicted_pct.eval(feed_dict), 0)
-       predicted_test = np.argmax(predicted_confidence, 1)
-
-    return img, predicted_test[0], np.max(predicted_confidence)
-
-def PredictImages(images):
-    # convert list to ndarray and PREP AS PER INPUT FORMAT
-    x_test = []
-    for image in images:
-        x_test.append(np.array(image))
-    x_test = np.stack(x_test)
+#    x_test = []
+#    for image in images:
+#        x_test.append(np.array(image))
+#    x_test = np.stack(x_test)
 
     sess=tf.Session()
     graph = tf.get_default_graph()
@@ -87,38 +55,16 @@ def PredictImages(images):
        predicted_confidence =  np.round(predicted_pct.eval(feed_dict), 0)
        predicted_output = np.argmax(predicted_confidence, 1)
 
-    return images, predicted_output, np.amax(predicted_confidence, axis=1)
-
-
-def DoLetterPrediction(image_array):
-
-    cols_count = int(len(image_array)/2) + (len(image_array) - int(len(image_array)/2)*2)
-
-    f, a = plt.subplots(nrows=2, ncols=cols_count, figsize=(8, 3),
-                                    sharex=True, sharey=True, squeeze=False)
-    img_nbr = 0
-    i = 0
-    for image in image_array:
-        img, prediction, prediction_confidence = test_mnist_model(image)
-        a[i][img_nbr].imshow(img, cmap='gray')
-        a[i][img_nbr].axis('off')
-
-        title = str(alphadigit[prediction]) + " (" + str(int(prediction_confidence)) + "%)"
-        a[i][img_nbr].set_title(title, fontsize=10)
-        img_nbr += 1
-
-        ''' New row'''
-        if (img_nbr == cols_count):
-            i = i + 1
-            img_nbr = 0
-
-    f.show()
-    plt.draw()
-    plt.waitforbuttonpress()
+    return predicted_output, np.amax(predicted_confidence, axis=1)
 
 
 ''' BEGIN: INITIATE TENSOR SESSION '''
-alphadigit = { 0:'0', 1:'1', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 7:'7', 8:'8', 9:'9', 10:'A', 11:'B', 12:'C', 13:'D', 14:'E', 15:'F', 16:'G', 17:'H', 18:'I', 19:'J', 20:'K', 21:'L', 22:'M', 23:'N', 24:'O', 25:'P', 26:'Q', 27:'R', 28:'S', 29:'T', 30:'U', 31:'V', 32:'W', 33:'X', 34:'Y', 35:'Z', 36:'a', 37:'b', 38:'d', 39:'e', 40:'f', 41:'g', 42:'h', 43:'n', 44:'q', 45:'r', 46:'t'}
+alphadigit = { 0:'0', 1:'1', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 7:'7', 8:'8', 
+              9:'9', 10:'A', 11:'B', 12:'C', 13:'D', 14:'E', 15:'F', 16:'G', 
+              17:'H', 18:'I', 19:'J', 20:'K', 21:'L', 22:'M', 23:'N', 24:'O', 
+              25:'P', 26:'Q', 27:'R', 28:'S', 29:'T', 30:'U', 31:'V', 32:'W', 
+              33:'X', 34:'Y', 35:'Z', 36:'a', 37:'b', 38:'d', 39:'e', 40:'f', 
+              41:'g', 42:'h', 43:'n', 44:'q', 45:'r', 46:'t'}
 cnn_obj = cnn("")
 single_layer_fnn = False
 
@@ -134,9 +80,9 @@ image_height = 28
 image_width = 28
 
 ## CREATE CNN & DNN MODEL
-optimizer, cost, accuracy, cnn_fnn_model = cnn_obj.create_simplified_model([image_height, image_width], hiddenlayer_1_width, hiddenlayer_2_width, len(alphadigit), single_layer_fnn)
-
-
+optimizer, cost, accuracy, cnn_fnn_model = cnn_obj.create_simplified_model(
+        [image_height, image_width], hiddenlayer_1_width, hiddenlayer_2_width, 
+        len(alphadigit), single_layer_fnn)
 ''' END: INITIATE TENSOR SESSION '''
 
 height, width = img.shape[:2]
@@ -154,11 +100,11 @@ for w_current in range(w_start, width, w_step_size) :
         crop_img = img[h_current:h_current + h_step_size,
                        w_current  :w_current   + w_step_size]
 
-        cv2.imwrite( f"{FileName}_Section{image_count}.jpg", crop_img );
+        cv2.imwrite( f"images/{FileName}_Section{image_count}.jpg", crop_img );
 
         # Find the vertical crop co-ordinates
         img_subsection, img_subsection_withlines, lines = readLineObj.DetectEdgesAndLines(None, copy.deepcopy(crop_img))
-        vert_coords, return_area = readLineObj.Normalize_vertical_lines(img_subsection_withlines, lines)
+        vert_coords, return_area = readLineObj.Find_Vertical_Lines(img_subsection_withlines, lines)
 
         print (f"Vertical Areas --> {return_area}")
         q75, q25 = np.percentile(return_area, [75 ,25])
@@ -184,7 +130,7 @@ for w_current in range(w_start, width, w_step_size) :
 
             # proceed if basic lines are detected
             if not lines is None:
-                horiz_coords, return_area = readLineObj.Normalize_horizontal_lines(img_subsection_withlines, lines)
+                horiz_coords, return_area = readLineObj.Find_Horizontal_Lines(img_subsection_withlines, lines)
                 print (f"    Horizondal Areas --> {return_area}")
                 q75, q25 = np.percentile(return_area, [75 ,25])
                 minimum_horizontal_area_threshold = q25 - (q75 - q25) * 1.5
@@ -195,38 +141,46 @@ for w_current in range(w_start, width, w_step_size) :
                         continue
                     print (f'    Horizontal split -> x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}, area:{area}')
                     cropped_horizondal_image = cropped_vertical_image[y1: y2 + 10, x1:x2]
-                    cv2.imwrite( f"{FileName}_Section{image_count}_SubSection{image_Vsection_count}.jpg", cropped_horizondal_image)
+                    cv2.imwrite( f"images/{FileName}_Section{image_count}_SubSection{image_Vsection_count}.jpg", cropped_horizondal_image)
                     image_Vsection_count+=1
 #                    FindContour(cropped_horizondal_image)
                     ''' Break images into sections and send for prediction'''
-                    images_for_analysis = readLineObj.AnalyzeHorizondalEdges(None, cropped_horizondal_image)
-#                    DoLetterPrediction(images_for_analysis)
-
+#                    images_for_analysis = []
+                    images_for_analysis = readLineObj.AnalyzeAndCropImages(None, cropped_horizondal_image)
+                    
+                    ''' BEGIN: PREDICT AND DISPLAY RESULTS '''
                     if len(images_for_analysis) > 0:
-                        image_array, predicted_output, predicted_confidence = PredictImages(images_for_analysis)
+#                        print (images_for_analysis[0])
+                        predicted_output, predicted_confidence = PredictImages(images_for_analysis)
 
-                        cols_count = int(len(image_array)/2) + (len(image_array) - int(len(image_array)/2)*2)
+                        cols_count = int(len(images_for_analysis)/2) + (len(images_for_analysis) - int(len(images_for_analysis)/2)*2)
                     
                         f, a = plt.subplots(nrows=2, ncols=cols_count, figsize=(8, 3),
                                                         sharex=True, sharey=True, squeeze=False)
                         img_nbr = 0
                         i = 0
-                        for image in image_array:
-                            a[i][img_nbr].imshow(image, cmap='gray')
+                        for image in images_for_analysis:
+                            a[i][img_nbr].imshow(image, cmap=plt.cm.gray)
                             a[i][img_nbr].axis('off')
                     
                             title = str(alphadigit[predicted_output[img_nbr]]) + " (" + str(int(predicted_confidence[img_nbr])) + "%)"
-                            a[i][img_nbr].set_title(title, fontsize=10)
+                            a[i][img_nbr].set_title(title, fontsize=5)
+                            
+                            if (predicted_confidence[img_nbr] > 70):
+                                a[i][img_nbr].set_facecolor('xkcd:mint green')
+                            else:
+                                a[i][img_nbr].set_facecolor('xkcd:salmon')
                             img_nbr += 1
                     
                             ''' New row'''
                             if (img_nbr == cols_count):
                                 i = i + 1
                                 img_nbr = 0
-                    
+#                            break
                         f.show()
                         plt.draw()
                         plt.waitforbuttonpress()
+                        ''' END: PREDICT AND DISPLAY RESULTS '''
 
             else:
                 print("    No Horizontal lines detected. Skipping...")

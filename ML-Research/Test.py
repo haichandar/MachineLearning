@@ -80,6 +80,80 @@ def main(argv):
     
     cv.waitKey()
     return 0
+
+def primepi(str):
+  for j in range (2, str):
+      if ((str%(j)) == 0 ):
+          return False
+  if( str < 2 ):
+      return False
+  else:
+      return True
+
+def primepartition(num):
+    primes = []
+    for a in range(1, num):
+        if primepi(a):
+            primes.append(a)
+            
+    found = False         
+    for outer in primes:
+        for inner in primes:
+            if outer == inner:
+                continue
+            else: 
+                if outer+inner == num:
+                    found = True
+                    break
+        if found:
+           break
+    return found
+
+
+
+def nestingdepth(string):
+  depth_arr = [0]
+  
+  if string is None or string.count("(") != string.count(")"):
+          return -1
+  
+  depth = 0
+  for i in string:
+      if i == "(":
+          depth += 1
+      elif i == ")":
+          if depth == 0:
+              return -1
+          else:
+              depth_arr.append(depth)
+          depth = depth - 1
+
+  return max(depth_arr)
+
+def rotatelist(lists, num):
+
+    if len(lists):
+        output_list = [] 
+        inner = num%len(lists)
+        if (num <= 0):
+            output_list = lists
+            return output_list
+        else:
+            if (num >0):
+                for item in range(inner, len(lists)): 
+                    output_list.append(lists[item]) 
+                for item in range(0, inner):  
+                    output_list.append(lists[item]) 
+            return output_list 
     
+    
+print(rotatelist(None,4))
+
 if __name__ == "__main__":
-    main(sys.argv[1:])
+#    main(sys.argv[1:])
+    print(primepartition(None))
+#    print(nestingdepth1("a(()())*?"))
+    print(nestingdepth(None))
+#    print(nestingdepth1("((jkl)78(A)&l(8(dd(FJI:),):)?)"))
+#    print(nestingdepth1("zb%78"))
+    

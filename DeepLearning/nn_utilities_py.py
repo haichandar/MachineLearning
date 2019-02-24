@@ -105,7 +105,18 @@ class nn_utilities:
             x_validation = np.apply_along_axis(self.rotate, 1, x_validation_data)
             del x_train_data, x_validation_data
             return self.prep_returndata(x_train, y_train, x_validation, y_validation, "emnist_alpha_digit_data")
-      
+     
+    def load_emnist_alphadigit_data_google_collab(self):
+            train = pd.read_csv(self.data_path + 'emnist-balanced-train.csv', header=None)
+            test = pd.read_csv(self.data_path + 'emnist-balanced-test.csv', header=None)
+
+            x_train_data, y_train = train.iloc[:, 1:].values, train.iloc[:, 0].values
+            x_validation_data, y_validation  = pd.get_dummies(test.iloc[:, 1:]), pd.get_dummies(test.iloc[:, 0])
+            x_train = np.apply_along_axis(self.rotate, 1, x_train_data)
+            x_validation = np.apply_along_axis(self.rotate, 1, x_validation_data)
+            del x_train_data, x_validation_data
+            return self.prep_returndata(x_train, y_train, x_validation, y_validation, "emnist_alpha_digit_data")        
+
     def load_emnist_letters_data(self):
             train = pd.read_csv(self.data_path + 'Image\EMINIST_EnglishLetters\emnist-letters-train.csv', header=None)
             test = pd.read_csv(self.data_path + 'Image\EMINIST_EnglishLetters\emnist-letters-test.csv', header=None)
@@ -189,9 +200,9 @@ class nn_utilities:
         train = h5py.File(data_dir+'pneumothorax_train.h5','r')
         validation = h5py.File(data_dir+'pneumothorax_test.h5','r')
 
-        x_train = train['image'][:200]
-        x_validation = validation['image'][200:300]
-        y_train = train['label'][:200]
-        y_validation = validation['label'][200:300]
+        x_train = train['image'][:]
+        x_validation = validation['image'][:500]
+        y_train = train['label'][:]
+        y_validation = validation['label'][:500]
 
         return self.prep_returndata(x_train, y_train, x_validation, y_validation, "Pneumothorax_data")

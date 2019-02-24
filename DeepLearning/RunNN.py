@@ -79,19 +79,19 @@ def run_cnn():
     
     # Flag makes it run with new simplified code and does not run validation accuracy for quicker response
     legacy_run = False
-    training = False
+    training = True
     
     ''' WE NEED THIS FOR LOOKING AT HEAT MAP OVER IMAGE'''
-    single_layer_fnn = False
+    single_layer_fnn = True
     
     ## GET INPUT  DATA
 #    input_data = nn_utilities_obj.prepare_digits_image_inputs()
 #    input_data = nn_utilities_obj.load_mnist_digit_data()
-    input_data = nn_utilities_obj.load_emnist_alphadigit_data()
+#    input_data = nn_utilities_obj.load_emnist_alphadigit_data()
 #    input_data = nn_utilities_obj.load_emnist_letters_data()
 
 #    input_data = nn_utilities_obj.load_fashion_data()
-#    input_data = nn_utilities_obj.load_PneumothoraxDataset()
+    input_data = nn_utilities_obj.load_PneumothoraxDataset()
 
     ## Override the default learning rate
     cnn_obj.learning_rate_var = 0.0001
@@ -111,45 +111,9 @@ def run_cnn():
         ## CREATE CNN & DNN MODEL
         optimizer, cost, accuracy, cnn_fnn_model = cnn_obj.create_simplified_model([image_height, image_width], hiddenlayer_1_width, hiddenlayer_2_width, input_data["y_train"].shape[1], single_layer_fnn)
     
-    if training:
-        ## TRAIN THE MODEL AND TEST PREDICTION
-        run_nn(cnn_obj, input_data, optimizer, cost, accuracy, cnn_fnn_model, "cnn\\"+input_data["name"], True)
-    else:
-        ## RUN AM EXAMPLE AND SEE HOW PREDICTION WORKS ##
-#        images = ['Number-0.tif', 'Number-1.tif', 'Number-2.tif', 'Number-3.tif', 'Number-4.tif', 'Number-5.tif', 'Number-6.1.tif', 'Number-6.2.tif', 'Number-7.tif', 'Number-8.1.tif', 'Number-8.2.tif','Number-9.tif']
-        import cv2
+    ## TRAIN THE MODEL AND TEST PREDICTION
+    run_nn(cnn_obj, input_data, optimizer, cost, accuracy, cnn_fnn_model, "cnn\\" + input_data["name"] + "\\" + input_data["name"], True, training)
         
-        cv2.imwrite("E:\MLData\Test\images\input1.jpg", 255 - input_data["x_validation"][11].reshape(28,28) )
-        cv2.imwrite("E:\MLData\Test\images\input2.jpg", 255 - input_data["x_validation"][100].reshape(28,28) )
-        cv2.imwrite("E:\MLData\Test\images\input3.jpg", 255 - input_data["x_validation"][8800].reshape(28,28) )
-        
-        print (alphadigit[np.argmax(input_data["y_validation"][11])], alphadigit[np.argmax(input_data["y_validation"][100])], alphadigit[np.argmax(input_data["y_validation"][8800])])
-        images = ["input1.jpg", "input2.jpg", "input3.jpg", 'TestSheet1_Section1_VSubSection1_HSubSection8.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection9.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection10.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection11.jpg','TestSheet1_Section1_VSubSection1_HSubSection12.jpg','TestSheet1_Section1_VSubSection1_HSubSection13.jpg','TestSheet1_Section1_VSubSection1_HSubSection14.jpg','TestSheet1_Section1_VSubSection1_HSubSection15.jpg','TestSheet1_Section1_VSubSection1_HSubSection16.jpg']
-        
-        cols_count = int(len(images)/2) + (len(images) - int(len(images)/2)*2)
-        f, a = plt.subplots(nrows=2, ncols=cols_count, figsize=(8, 3),
-                                        sharex=True, sharey=True, squeeze=False)
-        img_nbr = 0
-        i = 0
-        for image_name in images:
-            img, prediction, prediction_confidence = test_mnist_model(model_name="cnn\\"+input_data["name"],img_name=image_name)
-            a[i][img_nbr].imshow(img, cmap='gray')
-            a[i][img_nbr].axis('off')
-            
-#            title = str(prediction)
-#            print(prediction)
-            title = str(alphadigit[prediction]) + " (" + str(int(prediction_confidence)) + "%)" 
-            a[i][img_nbr].set_title(title, fontsize=10)
-            img_nbr += 1
-            
-            ''' New row'''
-            if (img_nbr == cols_count):
-                i = i + 1
-                img_nbr = 0
-                
-        f.show()
-        plt.draw()
-        plt.waitforbuttonpress()
            
 
 def run_rnn():
@@ -182,51 +146,91 @@ def run_rnn():
     run_nn(rnn_obj, input_data, optimizer, cost, accuracy, rnn_model, "rnn/"+input_data["name"])
 
 
-def run_nn(obj, input_data, optimizer, cost, accuracy, model, model_name=None, run_validation_accuracy=True):
-    # Python optimisation variables
-    training_epochs = 5
-    display_step = 100
-    batch_size = 200
-    quick_training = False
-
-    print ("Starting session")
-    #### TRAIN AND TEST NN
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-        # TRAIN
-        trained_model = obj.train_model(sess, model, training_epochs, display_step, batch_size, optimizer, cost, accuracy, input_data["x_train"], input_data["x_train_4D"], input_data["y_train"], input_data["x_validation"], input_data["y_validation"], quick_training, model_name, run_validation_accuracy)
-
-        ''''' TESTING '''
-        test = input_data["test"]
-
-        if (test is not None):
-
-            img_name = obj.rng.choice(test.filename)
-            filepath = os.path.join(data_path, 'Image', 'Numbers', 'Images', 'test', img_name)
-            img = imread(filepath, flatten=True)
-            # convert list to ndarray and PREP AS PER INPUT FORMAT
-            x_test = np.stack(img)
-            if len(input_data["x_train"].shape) == 2:
-                x_test = x_test.reshape(-1, input_data["x_train"].shape[1])
-            else:
-                x_test = x_test.reshape(-1, input_data["x_train"].shape[1], input_data["x_train"].shape[2])
-
-            ## PREDICT AND VALIDATE
-            predicted_test = obj.predictvalue(trained_model, x_test)
-
-            print("Prediction is: ", predicted_test[0])
-            pylab.imshow(img, cmap='gray')
-            pylab.axis('off')
-            pylab.show()
-        '''' TESTING END'''
-        print ("Ending session")
+def run_nn(obj, input_data, optimizer, cost, accuracy, model, model_name=None, run_validation_accuracy=True, Training=True):
+    
+    if Training:
+        # Python optimisation variables
+        training_epochs = 5
+        display_step = 100
+        batch_size = 200
+        quick_training = True
+    
+        print ("Starting session")
+        #### TRAIN AND TEST NN
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            # TRAIN
+            trained_model = obj.train_model(sess, model, training_epochs, display_step, batch_size, optimizer, cost, accuracy, input_data["x_train"], input_data["x_train_4D"], input_data["y_train"], input_data["x_validation"], input_data["y_validation"], quick_training, model_name, run_validation_accuracy)
+    else:
+        if input_data["name"] == "emnist_alpha_digit_data":
+            ## RUN AM EXAMPLE AND SEE HOW PREDICTION WORKS ##
+    #        images = ['Number-0.tif', 'Number-1.tif', 'Number-2.tif', 'Number-3.tif', 'Number-4.tif', 'Number-5.tif', 'Number-6.1.tif', 'Number-6.2.tif', 'Number-7.tif', 'Number-8.1.tif', 'Number-8.2.tif','Number-9.tif']
+            import cv2
+            
+            cv2.imwrite("E:\MLData\Test\images\input1.jpg", 255 - input_data["x_validation"][11].reshape(28,28) )
+            cv2.imwrite("E:\MLData\Test\images\input2.jpg", 255 - input_data["x_validation"][100].reshape(28,28) )
+            cv2.imwrite("E:\MLData\Test\images\input3.jpg", 255 - input_data["x_validation"][8800].reshape(28,28) )
+            
+            print (alphadigit[np.argmax(input_data["y_validation"][11])], alphadigit[np.argmax(input_data["y_validation"][100])], alphadigit[np.argmax(input_data["y_validation"][8800])])
+            images = ["input1.jpg", "input2.jpg", "input3.jpg", 'TestSheet1_Section1_VSubSection1_HSubSection8.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection9.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection10.jpg', 'TestSheet1_Section1_VSubSection1_HSubSection11.jpg','TestSheet1_Section1_VSubSection1_HSubSection12.jpg','TestSheet1_Section1_VSubSection1_HSubSection13.jpg','TestSheet1_Section1_VSubSection1_HSubSection14.jpg','TestSheet1_Section1_VSubSection1_HSubSection15.jpg','TestSheet1_Section1_VSubSection1_HSubSection16.jpg']
+            
+            cols_count = int(len(images)/2) + (len(images) - int(len(images)/2)*2)
+            f, a = plt.subplots(nrows=2, ncols=cols_count, figsize=(8, 3),
+                                            sharex=True, sharey=True, squeeze=False)
+            img_nbr = 0
+            i = 0
+            for image_name in images:
+                img, prediction, prediction_confidence = test_mnist_model(model_name="cnn\\"+input_data["name"],img_name=image_name)
+                a[i][img_nbr].imshow(img, cmap='gray')
+                a[i][img_nbr].axis('off')
+                
+    #            title = str(prediction)
+    #            print(prediction)
+                title = str(alphadigit[prediction]) + " (" + str(int(prediction_confidence)) + "%)" 
+                a[i][img_nbr].set_title(title, fontsize=10)
+                img_nbr += 1
+                
+                ''' New row'''
+                if (img_nbr == cols_count):
+                    i = i + 1
+                    img_nbr = 0
+                    
+            f.show()
+            plt.draw()
+            plt.waitforbuttonpress()
         
-        
-    ## DO MIT CAM Analysis to print the Heatmap
-    CAM_analysis = False
-    if (CAM_analysis == True):
-        load_Pneumothorax_model(model_name, obj, input_data)
+        elif input_data["name"] == "mnist_digit_data":
+            ''''' TESTING '''
+            test = input_data["test"]
+    
+            if (test is not None):
+    
+                img_name = obj.rng.choice(test.filename)
+                filepath = os.path.join(data_path, 'Image', 'Numbers', 'Images', 'test', img_name)
+                img = imread(filepath, flatten=True)
+                # convert list to ndarray and PREP AS PER INPUT FORMAT
+                x_test = np.stack(img)
+                if len(input_data["x_train"].shape) == 2:
+                    x_test = x_test.reshape(-1, input_data["x_train"].shape[1])
+                else:
+                    x_test = x_test.reshape(-1, input_data["x_train"].shape[1], input_data["x_train"].shape[2])
+    
+                ## PREDICT AND VALIDATE
+                predicted_test = obj.predictvalue(trained_model, x_test)
+    
+                print("Prediction is: ", predicted_test[0])
+                pylab.imshow(img, cmap='gray')
+                pylab.axis('off')
+                pylab.show()
+            '''' TESTING END'''
+            print ("Ending session")
 
+        elif input_data["name"] == "Pneumothorax_data":
+            ## DO MIT CAM Analysis to print the Heatmap
+            CAM_analysis = True
+            if (CAM_analysis == True):
+                load_Pneumothorax_model(model_name, obj, input_data)
+        
 def test_mnist_model(model_name, img_name):
     filepath = os.path.join(data_path, 'Test', 'Images',  img_name)
     
@@ -338,7 +342,7 @@ def extract_features_weights(sess, cnn_obj):
         dense_weights = sess.graph.get_tensor_by_name('fnn/FNN_Output_Weight:0')
     except:
         #access the weights by searching by name
-        dense_weights = sess.graph.get_tensor_by_name('dense_layer/kernel:0')
+        dense_weights = sess.graph.get_tensor_by_name('fnn/dense_layer/kernel:0')
 
     return (feature_maps, dense_weights)
 
