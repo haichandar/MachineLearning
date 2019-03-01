@@ -12,7 +12,7 @@ import copy
 from ReadLines import ReadLines
 import matplotlib.pyplot as plt
 import tensorflow as tf
-
+from scipy.ndimage import zoom
 
 sys.path.insert(0, '..\DeepLearning')
 from cnn import cnn
@@ -20,6 +20,51 @@ from cnn import cnn
 readLineObj = ReadLines()
 img = cv2.imread("C:\\Users\\chandar_s\\Pictures\\TestSheet2.tif")
 FileName = "TestSheet2"
+
+
+def clipped_zoom(img, zoom_factor, **kwargs):
+
+    h, w = img.shape[:2]
+
+    # For multichannel images we don't want to apply the zoom factor to the RGB
+    # dimension, so instead we create a tuple of zoom factors, one per array
+    # dimension, with 1's for any trailing dimensions after the width and height.
+    zoom_tuple = (zoom_factor,) * 2 + (1,) * (img.ndim - 2)
+
+    # Zooming out
+    if zoom_factor < 1:
+
+        # Bounding box of the zoomed-out image within the output array
+        zh = int(np.round(h * zoom_factor))
+        zw = int(np.round(w * zoom_factor))
+        top = (h - zh) // 2
+        left = (w - zw) // 2
+
+        # Zero-padding
+        out = np.zeros_like(img)
+        out[top:top+zh, left:left+zw] = zoom(img, zoom_tuple, **kwargs)
+
+    # Zooming in
+    elif zoom_factor > 1:
+
+        # Bounding box of the zoomed-in region within the input array
+        zh = int(np.round(h / zoom_factor))
+        zw = int(np.round(w / zoom_factor))
+        top = (h - zh) // 2
+        left = (w - zw) // 2
+
+        out = zoom(img[top:top+zh, left:left+zw], zoom_tuple, **kwargs)
+
+        # `out` might still be slightly larger than `img` due to rounding, so
+        # trim off any extra pixels at the edges
+        trim_top = ((out.shape[0] - h) // 2)
+        trim_left = ((out.shape[1] - w) // 2)
+        out = out[trim_top:trim_top+h, trim_left:trim_left+w]
+
+    # If zoom_factor == 1, just return the input array
+    else:
+        out = img
+    return out
 
 
 def PredictImages(x_test):
@@ -56,7 +101,7 @@ def PredictImages(x_test):
        predicted_output = np.argmax(predicted_confidence, 1)
 
     return predicted_output, np.amax(predicted_confidence, axis=1)
-
+    
 
 ''' BEGIN: INITIATE TENSOR SESSION '''
 alphadigit = { 0:'0', 1:'1', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 7:'7', 8:'8', 
@@ -165,7 +210,8 @@ for w_current in range(w_start, width, w_step_size) :
                     
                             title = str(alphadigit[predicted_output[img_nbr]]) + " (" + str(int(predicted_confidence[img_nbr])) + "%)"
                             a[i][img_nbr].set_title(title, fontsize=5)
-                            
+                            cv2.imwrite( f"E://MLData//Test//GeneratedLetters//{FileName}_Section{image_count}_SubSection{image_Vsection_count}_Image{img_nbr}_prediction{str(alphadigit[predicted_output[img_nbr]])}.jpg", clipped_zoom(image, 1.5))
+
                             if (predicted_confidence[img_nbr] > 70):
                                 a[i][img_nbr].set_facecolor('xkcd:mint green')
                             else:

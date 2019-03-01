@@ -23,6 +23,8 @@ tf.set_random_seed(random_state)
 
 # Load the input data
 input_data = nn_utilities(data_path).load_emnist_alphadigit_data_google_collab()
+#input_data = nn_utilities(data_path).load_emnist_alphadigit_data()
+
 x_train_input = input_data["x_train"]
 print (f"Number of training records {x_train_input.shape[0]}")
 print (f"Shape {x_train_input.shape}")
@@ -40,6 +42,7 @@ def getTrainBatch(x_train, y_train, batch_size, batch_pointer):
     return batch
 
 def conv_batch_norm(x, n_out, phase_train):
+
     beta_init = tf.constant_initializer(value = 0.0,
                                         dtype=tf.float32)
     gamma_init = tf.constant_initializer(value = 1.0,
@@ -127,118 +130,149 @@ output_classes = y_train_input.shape[1]
 x = tf.placeholder("float", [None, None], name="input")
 y = tf.placeholder("float", [None, output_classes], name="labels")
 keep_prob = tf.placeholder("float", name="keep_probability")
-phase_train = tf.placeholder(tf.bool)
+phase_train = tf.placeholder(tf.bool , name="phase_train")
 learning_rate_var = 0.001
 
-def adjustImage(frame):
-    frame1 = tf.image.per_image_standardization(frame)
-    frame2 = tf.image.random_brightnes(frame1, 50, seed = tf.set_random_seed(random_state))
-    return frame2
 
 # if the input image was flattenned, make it to 4 D image
 x_shaped = tf.reshape(x, [-1, int(x_train_input.shape[1] ** 0.5), int(x_train_input.shape[1] ** 0.5), cnn_layer1_input_channels])
   
-x_adjusted_image = tf.map_fn(lambda frame: adjustImage, x_shaped)
+x_adjusted_image = tf.map_fn(lambda frame: tf.image.per_image_standardization(
+        tf.image.random_brightness
+                             (frame, 50, seed = tf.set_random_seed(random_state))), 
+                              x_shaped)
 
-with tf.variable_scope('cnn10', reuse=tf.AUTO_REUSE):
-   # first convolutional layer
-    conv1 = tf.layers.conv2d(inputs=x_adjusted_image, filters=cnn_layer1_filter_count, 
-                             kernel_size=cnn_layer1_filter_shape, 
-                             kernel_initializer=tf.initializers.lecun_normal(), 
-                             use_bias=True, bias_initializer=tf.zeros_initializer(), 
-                             padding = 'SAME',
-                             activation=None,
-                             name='CNN_Layer1')
+def CreateModel(x_adjusted_image):
+    with tf.variable_scope('cnn10', reuse=tf.AUTO_REUSE):
+       # first convolutional layer
+        conv1 = tf.layers.conv2d(inputs=x_adjusted_image, filters=cnn_layer1_filter_count, 
+                                 kernel_size=cnn_layer1_filter_shape, 
+                                 kernel_initializer=tf.initializers.lecun_normal(), 
+                                 use_bias=True, bias_initializer=tf.zeros_initializer(), 
+                                 padding = 'SAME',
+                                 activation=None,
+                                 name='CNN_Layer1')
+        
+        conv1_relu = tf.nn.relu(conv_batch_norm(conv1, cnn_layer1_filter_count, 
+                                                phase_train))
     
-    conv1_relu = tf.nn.relu(conv_batch_norm(conv1, cnn_layer1_filter_count, 
-                                            phase_train))
-
-with tf.variable_scope('cnn15', reuse=tf.AUTO_REUSE):
-
-    conv15 = tf.layers.conv2d(inputs=conv1_relu, filters=cnn_layer15_filter_count, 
-                             kernel_size=cnn_layer15_filter_shape, 
-                             kernel_initializer=tf.initializers.lecun_normal(), 
-                             use_bias=True, bias_initializer=tf.zeros_initializer(), 
-                             padding = 'SAME',
-                             activation=None,
-                             name='CNN_Layer15')
+    with tf.variable_scope('cnn15', reuse=tf.AUTO_REUSE):
     
-
-    conv15_relu = tf.nn.relu(conv_batch_norm(conv15, cnn_layer15_filter_count, 
-                                            phase_train))
-    # first pooling layer
-    conv15_pool = tf.layers.max_pooling2d(inputs=conv15_relu, 
-                                    pool_size=cnn_layer15_pooling_shape, 
-                                    strides=cnn_layer15_pooling_stride, 
-                                    name='CNN_Layer15_pooling')
-
-with tf.variable_scope('cnn20', reuse=tf.AUTO_REUSE):
-    # second convolutional layer
-    conv2 = tf.layers.conv2d(inputs=conv15_pool, 
-                             filters=cnn_layer2_filter_count, 
-                             kernel_size=cnn_layer2_filter_shape, 
-                             kernel_initializer=tf.initializers.lecun_normal(), 
-                             use_bias=True,
-                             bias_initializer=tf.zeros_initializer(), 
-                             padding = 'SAME',
-                             activation=None,
-                             name='CNN_Layer2')
-
-    conv2_relu = tf.nn.relu(conv_batch_norm(conv2, cnn_layer2_filter_count, 
-                                            phase_train))
-
-with tf.variable_scope('cnn25', reuse=tf.AUTO_REUSE):
-
-    conv25 = tf.layers.conv2d(inputs=conv2_relu, filters=cnn_layer25_filter_count, 
-                             kernel_size=cnn_layer25_filter_shape, 
-                             kernel_initializer=tf.initializers.lecun_normal(), 
-                             use_bias=True, bias_initializer=tf.zeros_initializer(), 
-                             padding = 'SAME',
-                             activation=None,
-                             name='CNN_Layer25')
-
-    conv25_relu = tf.nn.relu(conv_batch_norm(conv25, cnn_layer25_filter_count, 
-                                            phase_train))
-    # second pooling layer
-    cnn_output = tf.layers.max_pooling2d(inputs=conv25_relu, 
-                                    pool_size=cnn_layer25_pooling_shape, 
-                                    strides=cnn_layer25_pooling_stride, 
-                                    name='CNN_Layer25_pooling')        
-
-
-with tf.variable_scope('fnn10', reuse=tf.AUTO_REUSE):
-    # pass flattened input into the first fully connected layer
-    fc1 = tf.layers.dense(inputs=tf.layers.flatten(cnn_output), 
-                          units=n_hidden_1, activation=None, 
-                          kernel_initializer=tf.initializers.lecun_normal(), 
-                          use_bias=True, bias_initializer=tf.zeros_initializer(), 
-                          name="fnn_Layer1")
+        conv15 = tf.layers.conv2d(inputs=conv1_relu, filters=cnn_layer15_filter_count, 
+                                 kernel_size=cnn_layer15_filter_shape, 
+                                 kernel_initializer=tf.initializers.lecun_normal(), 
+                                 use_bias=True, bias_initializer=tf.zeros_initializer(), 
+                                 padding = 'SAME',
+                                 activation=None,
+                                 name='CNN_Layer15')
+        
     
-    fc1_relu = tf.nn.relu(fc_batch_norm(fc1, n_hidden_1, 
-                                            phase_train))
+        conv15_relu = tf.nn.relu(conv_batch_norm(conv15, cnn_layer15_filter_count, 
+                                                phase_train))
+        # first pooling layer
+        conv15_pool = tf.layers.max_pooling2d(inputs=conv15_relu, 
+                                        pool_size=cnn_layer15_pooling_shape, 
+                                        strides=cnn_layer15_pooling_stride, 
+                                        name='CNN_Layer15_pooling')
     
-    fc1_dropout = tf.layers.dropout(fc1_relu, rate= 1 - keep_prob)
+    with tf.variable_scope('cnn20', reuse=tf.AUTO_REUSE):
+        # second convolutional layer
+        conv2 = tf.layers.conv2d(inputs=conv15_pool, 
+                                 filters=cnn_layer2_filter_count, 
+                                 kernel_size=cnn_layer2_filter_shape, 
+                                 kernel_initializer=tf.initializers.lecun_normal(), 
+                                 use_bias=True,
+                                 bias_initializer=tf.zeros_initializer(), 
+                                 padding = 'SAME',
+                                 activation=None,
+                                 name='CNN_Layer2')
+    
+        conv2_relu = tf.nn.relu(conv_batch_norm(conv2, cnn_layer2_filter_count, 
+                                                phase_train))
+    
+    with tf.variable_scope('cnn25', reuse=tf.AUTO_REUSE):
+    
+        conv25 = tf.layers.conv2d(inputs=conv2_relu, filters=cnn_layer25_filter_count, 
+                                 kernel_size=cnn_layer25_filter_shape, 
+                                 kernel_initializer=tf.initializers.lecun_normal(), 
+                                 use_bias=True, bias_initializer=tf.zeros_initializer(), 
+                                 padding = 'SAME',
+                                 activation=None,
+                                 name='CNN_Layer25')
+    
+        conv25_relu = tf.nn.relu(conv_batch_norm(conv25, cnn_layer25_filter_count, 
+                                                phase_train))
+        # second pooling layer
+        cnn_output = tf.layers.max_pooling2d(inputs=conv25_relu, 
+                                        pool_size=cnn_layer25_pooling_shape, 
+                                        strides=cnn_layer25_pooling_stride, 
+                                        name='CNN_Layer25_pooling')        
+    
+    
+    with tf.variable_scope('fnn10', reuse=tf.AUTO_REUSE):
+        # pass flattened input into the first fully connected layer
+        fc1 = tf.layers.dense(inputs=tf.layers.flatten(cnn_output), 
+                              units=n_hidden_1, activation=None, 
+                              kernel_initializer=tf.initializers.lecun_normal(), 
+                              use_bias=True, bias_initializer=tf.zeros_initializer(), 
+                              name="fnn_Layer1")
+        
+        fc1_relu = tf.nn.relu(fc_batch_norm(fc1, n_hidden_1, 
+                                                phase_train))
+        
+        fc1_dropout = tf.layers.dropout(fc1_relu, rate= 1 - keep_prob)
+    
+    with tf.variable_scope('fnn20', reuse=tf.AUTO_REUSE):
+        # pass input into the second fully connected layer
+        fc2 = tf.layers.dense(inputs=fc1_dropout, units=n_hidden_2, 
+                              activation=tf.nn.relu, 
+                              kernel_initializer=tf.initializers.lecun_normal(), 
+                              use_bias=True, bias_initializer=tf.zeros_initializer(), 
+                              name="fnn_Layer2")
+    
+        fc2_relu = tf.nn.relu(fc_batch_norm(fc2, n_hidden_2, 
+                                                phase_train))
+    
+        fc2_dropout = tf.layers.dropout(fc2_relu, rate= 1 - keep_prob)
+    
+        # define third fully connected layer
+        model = tf.layers.dense(inputs=fc2_dropout, 
+                                units=output_classes, 
+                                kernel_initializer=tf.initializers.lecun_normal(), 
+                                use_bias=True, bias_initializer=tf.zeros_initializer(), 
+                                name="fnn_Out") 
+        return model
 
-with tf.variable_scope('fnn20', reuse=tf.AUTO_REUSE):
-    # pass input into the second fully connected layer
-    fc2 = tf.layers.dense(inputs=fc1_dropout, units=n_hidden_2, 
-                          activation=tf.nn.relu, 
-                          kernel_initializer=tf.initializers.lecun_normal(), 
-                          use_bias=True, bias_initializer=tf.zeros_initializer(), 
-                          name="fnn_Layer2")
 
-    fc2_relu = tf.nn.relu(fc_batch_norm(fc2, n_hidden_2, 
-                                            phase_train))
 
-    fc2_dropout = tf.layers.dropout(fc2_relu, rate= 1 - keep_prob)
+with tf.variable_scope('cnn1', reuse=tf.AUTO_REUSE):
+    conv1 = tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=x_adjusted_image, filters=32, kernel_size=[5, 5], padding="same", activation=None),32,phase_train))
+    conv2 = tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=conv1, filters=32, kernel_size=[5, 5], padding="same", activation=None),32,phase_train))
+    skip1 = tf.layers.max_pooling2d(conv1+conv2, 2, 2)
 
-    # define third fully connected layer
-    model = tf.layers.dense(inputs=fc2_dropout, 
-                            units=output_classes, 
-                            kernel_initializer=tf.initializers.lecun_normal(), 
-                            use_bias=True, bias_initializer=tf.zeros_initializer(), 
-                            name="fnn_Out") 
+with tf.variable_scope('cnn2', reuse=tf.AUTO_REUSE):
+    conv3 = tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=skip1, filters=64, kernel_size=[5, 5], padding="same", activation=None),64,phase_train))
+    conv4 = tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=conv3, filters=64, kernel_size=[5, 5], padding="same", activation=None),64,phase_train))
+    skip2 = tf.layers.max_pooling2d(conv3+conv4, 2, 2)
 
+with tf.variable_scope('cnn3', reuse=tf.AUTO_REUSE):
+    conv5 =  tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=skip2, filters=128, kernel_size=[3, 3], padding="same", activation=None),128,phase_train))
+    conv6 =  tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=conv5, filters=128, kernel_size=[3, 3], padding="same", activation=None),128,phase_train))
+    skip3 = tf.layers.max_pooling2d(conv5+conv6, 2, 2)
+
+with tf.variable_scope('cnn4', reuse=tf.AUTO_REUSE):
+    conv7 = tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=skip3, filters=256, kernel_size=[3, 3], padding="same", activation=None),256,phase_train))
+    conv8 = tf.nn.relu(conv_batch_norm(tf.layers.conv2d(inputs=conv7, filters=256, kernel_size=[3, 3], padding="same", activation=None),256,phase_train))
+    skip4 = tf.layers.max_pooling2d(conv7+conv8, 2, 2)
+
+g_avg_pool = tf.reduce_mean(skip4, [1,2])
+
+model = tf.layers.dense(g_avg_pool, output_classes)
+
+    
+#model = CreateModel(x_adjusted_image)
+
+#model = CreateCNNModel(x_adjusted_image)
        
 with tf.variable_scope('xent', reuse=tf.AUTO_REUSE):
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=model, labels=y))
@@ -252,7 +286,7 @@ with tf.variable_scope('Accuracy', reuse=tf.AUTO_REUSE):
 
 ''' TRAIN THE MODEL '''
 batch_size = 120
-training_epochs = 5
+training_epochs = 100
 display_step = 1000
 run_validation_accuracy = True
 
