@@ -13,6 +13,11 @@ import pandas, xgboost, numpy, textblob, string
 from keras.preprocessing import text, sequence
 from keras import layers, models, optimizers
 
+from nltk.corpus import stopwords
+from nltk.stem.wordnet import WordNetLemmatizer
+import re
+#from keras.utils import  np_utils
+
 ''' HYPER PARAMETERS '''
 input_file = 'T&ADataForAnalysis'
 data=pandas.read_excel(input_file +'.xlsx', sheet_name="BaseData") #Include your data file instead of data.xlsx
@@ -23,16 +28,33 @@ Analysis_Result_columnName = 'SerialNumber'
 Analysis_ticket_columnName  = 'Number'
 ''' HYPER PARAMETERS ''' 
 
+stop = set(stopwords.words('english'))
+exclude = set(string.punctuation)
+lemma = WordNetLemmatizer()
+
+# Cleaning the text sentences so that punctuation marks, stop words & digits are removed
+def clean(doc):
+    stop_free = " ".join([i for i in doc.lower().split() if i not in stop])
+    punc_free = ''.join(ch for ch in stop_free if ch not in exclude)
+    normalized = " ".join(lemma.lemmatize(word) for word in punc_free.split())
+    processed = re.sub(r"\d+","",normalized)
+    y = processed.split()
+    return y
+
 
 labels, texts = [], []
 for index,row in ticket_data.iterrows():
-    if (row[Analysis_primary_columnName] and str(row[Analysis_primary_columnName]) != 'nan' ):
-        line = str(row[Analysis_primary_columnName])
-    else:
-        line = str(row[Analysis_secondary_columnName])
-
     if (str(row[Analysis_Result_columnName]) != 'nan'):
-        texts.append(line)
+        if (row[Analysis_primary_columnName] and str(row[Analysis_primary_columnName]) != 'nan' ):
+            line = str(row[Analysis_primary_columnName])
+        else:
+            line = str(row[Analysis_secondary_columnName])
+
+        line = line.strip()
+        cleaned = clean(line)
+        cleaned = ' '.join(cleaned)
+
+        texts.append(cleaned)
         labels.append(row[Analysis_Result_columnName])
 
 # load the dataset
@@ -49,14 +71,13 @@ trainDF['text'] = texts
 trainDF['label'] = labels
 
 #%%
-# split the dataset into training and validation datasets 
-train_x, valid_x, train_y, valid_y = model_selection.train_test_split(trainDF['text'], trainDF['label'])
 
 # label encode the target variable 
 encoder = preprocessing.LabelEncoder()
-train_y = encoder.fit_transform(train_y)
-valid_y = encoder.fit_transform(valid_y)
+encoded_y = encoder.fit_transform(trainDF['label'])
 
+# split the dataset into training and validation datasets 
+train_x, valid_x, train_y, valid_y = model_selection.train_test_split(trainDF['text'], encoded_y)
 
 # create a count vectorizer object 
 count_vect = CountVectorizer(analyzer='word', token_pattern=r'\w{1,}')
@@ -77,6 +98,7 @@ tfidf_vect_ngram = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngr
 tfidf_vect_ngram.fit(trainDF['text'])
 xtrain_tfidf_ngram =  tfidf_vect_ngram.transform(train_x)
 xvalid_tfidf_ngram =  tfidf_vect_ngram.transform(valid_x)
+
 
 # characters level tf-idf
 tfidf_vect_ngram_chars = TfidfVectorizer(analyzer='char', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
@@ -153,19 +175,32 @@ topic_summaries = []
 for i, topic_dist in enumerate(topic_word):
     topic_words = numpy.array(vocab)[numpy.argsort(topic_dist)][:-(n_top_words+1):-1]
     topic_summaries.append(' '.join(topic_words))
-    
-    
+#%% 
 def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
-    # fit the training dataset on the classifier
-    classifier.fit(feature_vector_train, label)
-    
-    # predict the labels on validation dataset
-    predictions = classifier.predict(feature_vector_valid)
-    
     if is_neural_net:
+        # fit the training dataset on the classifier
+        classifier.fit(feature_vector_train, label, epochs=5)
+        # predict the labels on validation dataset
+        predictions = classifier.predict(feature_vector_valid)
         predictions = predictions.argmax(axis=-1)
+#        print (predictions)
+    else:
+        # fit the training dataset on the classifier
+        classifier.fit(feature_vector_train, label)
+        # predict the labels on validation dataset
+        predictions = classifier.predict(feature_vector_valid)
+        
+        
+    return metrics.accuracy_score(predictions, valid_y) *100
+#%%
     
-    return metrics.accuracy_score(predictions, valid_y)    
+from sklearn.neighbors import KNeighborsClassifier
+
+# Naive Bayes on Word Level TF IDF Vectors
+accuracy = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("KNN, WordLevel TF-IDF: ", accuracy)
+    
+
 #%%
 # Naive Bayes on Count Vectors
 accuracy = train_model(naive_bayes.MultinomialNB(), xtrain_count, train_y, xvalid_count)
@@ -248,13 +283,14 @@ def create_cnn():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(pooling_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(1, activation="sigmoid")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
-    model.compile(optimizer=optimizers.Adam(), loss='binary_crossentropy')
+    model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy')
     
     return model
+
 
 classifier = create_cnn()
 accuracy = train_model(classifier, train_seq_x, train_y, valid_seq_x, is_neural_net=True)
@@ -274,11 +310,11 @@ def create_rnn_lstm():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(lstm_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(1, activation="sigmoid")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
-    model.compile(optimizer=optimizers.Adam(), loss='binary_crossentropy')
+    model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy')
     
     return model
 
@@ -300,11 +336,11 @@ def create_rnn_gru():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(lstm_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(1, activation="sigmoid")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
-    model.compile(optimizer=optimizers.Adam(), loss='binary_crossentropy')
+    model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy')
     
     return model
 
@@ -326,11 +362,11 @@ def create_bidirectional_rnn():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(lstm_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(1, activation="sigmoid")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
-    model.compile(optimizer=optimizers.Adam(), loss='binary_crossentropy')
+    model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy')
     
     return model
 
@@ -347,7 +383,7 @@ def create_rcnn():
     embedding_layer = layers.SpatialDropout1D(0.3)(embedding_layer)
     
     # Add the recurrent layer
-    rnn_layer = layers.Bidirectional(layers.GRU(50, return_sequences=True))(embedding_layer)
+    layers.Bidirectional(layers.GRU(50, return_sequences=True))(embedding_layer)
     
     # Add the convolutional Layer
     conv_layer = layers.Convolution1D(100, 3, activation="relu")(embedding_layer)
@@ -358,11 +394,11 @@ def create_rcnn():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(pooling_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(1, activation="sigmoid")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
-    model.compile(optimizer=optimizers.Adam(), loss='binary_crossentropy')
+    model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy')
     
     return model
 

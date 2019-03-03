@@ -2,14 +2,17 @@
 ''' This program takes a excel sheet as input where each row in first column of sheet represents a document.  '''
 
 import pandas as pd
-from nltk.corpus import stopwords
-from nltk.stem.wordnet import WordNetLemmatizer
+import string
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import LabelEncoder
-import string
+
+from nltk.corpus import stopwords
+from nltk.stem.wordnet import WordNetLemmatizer
 import re
+
 
 # YOU NEED TO DO THIS FIRST TIME TO DOWNLOAD FEW CORPORA FOR TEXT ANALYSIS
 #import nltk
@@ -72,7 +75,6 @@ for index,row in ticket_data.iterrows():
         testing_corpus.append(cleaned)
         testing_ticket_numbers.append(row[Analysis_ticket_columnName])   
 
-
 label_encoder = LabelEncoder()
 integer_encoded = label_encoder.fit_transform(training_output_category)
 
@@ -80,6 +82,57 @@ integer_encoded = label_encoder.fit_transform(training_output_category)
 #Count Vectoriser then tidf transformer
 transformer = TfidfVectorizer(stop_words='english')
 tfidf = transformer.fit_transform(training_corpus)
+#%%
+from sklearn import model_selection, metrics
+# split the dataset into training and validation datasets 
+train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, integer_encoded)
+
+#transformer_new = TfidfVectorizer(stop_words='english')
+transformer_new = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', max_features=50000)
+tfidf_fit = transformer_new.fit(training_corpus)
+xtrain_tfidf = tfidf_fit.transform(train_x)
+xvalid_tfidf = tfidf_fit.transform(valid_x)
+
+def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
+    # fit the training dataset on the classifier
+    classifier.fit(feature_vector_train, label)
+    
+    # predict the labels on validation dataset
+    predictions = classifier.predict(feature_vector_valid)
+   
+#    print (predictions)
+#    print (valid_y)
+    if is_neural_net:
+        predictions = predictions.argmax(axis=-1)
+    
+    return metrics.accuracy_score(predictions, valid_y) *100
+
+#%%
+#print (xtrain_tfidf)
+# Naive Bayes on Word Level TF IDF Vectors
+accuracy = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("KNN, WordLevel TF-IDF: ", accuracy)
+
+from sklearn import model_selection, preprocessing, linear_model, naive_bayes, svm
+from sklearn import decomposition, ensemble
+
+# Naive Bayes on Word Level TF IDF Vectors
+accuracy = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("NB, WordLevel TF-IDF: ", accuracy)
+
+# Linear Classifier on Word Level TF IDF Vectors
+accuracy = train_model(linear_model.LogisticRegression(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("LR, WordLevel TF-IDF: ", accuracy)
+
+# SVM on Ngram Level TF IDF Vectors
+accuracy = train_model(svm.SVC(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("SVM, WordLevel TF-IDF: ", accuracy)
+
+# RF on Word Level TF IDF Vectors
+accuracy = train_model(ensemble.RandomForestClassifier(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("RF, WordLevel TF-IDF: ", accuracy)
+
+#%%
 #print(tfidf.shape)                        
 
 # FIRST DO UNSUPERVISED CLUSTERING ON TEXT USING KMeans
@@ -112,6 +165,7 @@ lookup = lookup.set_index('Machine Cluster')['Human Classification'].to_dict()
 modelknn = KNeighborsClassifier(n_neighbors=25)
 modelknn.fit(tfidf, integer_encoded)
 
+#%%
 
 ''' PREDICT THE DATA WITH KNN AND KMEANS '''
 
