@@ -16,46 +16,55 @@ from keras import layers, models, optimizers
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
 import re
-#from keras.utils import  np_utils
+from keras.utils import  np_utils
 
 ''' HYPER PARAMETERS '''
 input_file = 'T&ADataForAnalysis'
 data=pandas.read_excel(input_file +'.xlsx', sheet_name="BaseData") #Include your data file instead of data.xlsx
 ticket_data = data.iloc[:,0:30] #Selecting the column that has text.
-Analysis_primary_columnName = 'Description (Customer visible)'
+Analysis_primary_columnName = 'Work notes'
 Analysis_secondary_columnName = 'Short description'
 Analysis_Result_columnName = 'SerialNumber'
 Analysis_ticket_columnName  = 'Number'
+testing_corpus=[]
+testing_description=[]
+testing_ticket_numbers=[]
 ''' HYPER PARAMETERS ''' 
 
-stop = set(stopwords.words('english'))
-exclude = set(string.punctuation)
-lemma = WordNetLemmatizer()
+#stop = set(stopwords.words('english'))
+#exclude = set(string.punctuation)
+#lemma = WordNetLemmatizer()
 
 # Cleaning the text sentences so that punctuation marks, stop words & digits are removed
-def clean(doc):
-    stop_free = " ".join([i for i in doc.lower().split() if i not in stop])
-    punc_free = ''.join(ch for ch in stop_free if ch not in exclude)
-    normalized = " ".join(lemma.lemmatize(word) for word in punc_free.split())
-    processed = re.sub(r"\d+","",normalized)
-    y = processed.split()
-    return y
-
+#def clean(doc):
+#    stop_free = " ".join([i for i in doc.lower().split() if i not in stop])
+#    punc_free = ''.join(ch for ch in stop_free if ch not in exclude)
+#    normalized = " ".join(lemma.lemmatize(word) for word in punc_free.split())
+#    processed = re.sub(r"\d+","",normalized)
+#    y = processed.split()
+#    return y
+#
 
 labels, texts = [], []
 for index,row in ticket_data.iterrows():
+    if (row[Analysis_primary_columnName] and str(row[Analysis_primary_columnName]) != 'nan' ):
+        line = str(row[Analysis_primary_columnName])
+    else:
+        line = str(row[Analysis_secondary_columnName])
+
+#        line = line.strip()
+#        cleaned = clean(line)
+#        cleaned = ' '.join(cleaned)
+#        texts.append(cleaned)
+        
     if (str(row[Analysis_Result_columnName]) != 'nan'):
-        if (row[Analysis_primary_columnName] and str(row[Analysis_primary_columnName]) != 'nan' ):
-            line = str(row[Analysis_primary_columnName])
-        else:
-            line = str(row[Analysis_secondary_columnName])
-
-        line = line.strip()
-        cleaned = clean(line)
-        cleaned = ' '.join(cleaned)
-
-        texts.append(cleaned)
+        texts.append(line)
         labels.append(row[Analysis_Result_columnName])
+    else:
+        testing_description.append(line)
+        testing_corpus.append(line)
+        testing_ticket_numbers.append(row[Analysis_ticket_columnName])   
+
 
 # load the dataset
 #data = open('data/corpus', encoding="utf8").read()
@@ -179,17 +188,15 @@ for i, topic_dist in enumerate(topic_word):
 def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
     if is_neural_net:
         # fit the training dataset on the classifier
-        classifier.fit(feature_vector_train, label, epochs=5)
+        classifier.fit(feature_vector_train, label, batch_size = 1000, epochs=5, validation_split=0.05)
         # predict the labels on validation dataset
         predictions = classifier.predict(feature_vector_valid)
         predictions = predictions.argmax(axis=-1)
-#        print (predictions)
     else:
         # fit the training dataset on the classifier
         classifier.fit(feature_vector_train, label)
         # predict the labels on validation dataset
         predictions = classifier.predict(feature_vector_valid)
-        
         
     return metrics.accuracy_score(predictions, valid_y) *100
 #%%
@@ -283,11 +290,11 @@ def create_cnn():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(pooling_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation="softmax", name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
-    model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy')
+    model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy', metrics=["accuracy"])
     
     return model
 
@@ -310,7 +317,7 @@ def create_rnn_lstm():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(lstm_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation="softmax", name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
@@ -336,7 +343,7 @@ def create_rnn_gru():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(lstm_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation="softmax", name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
@@ -362,7 +369,7 @@ def create_bidirectional_rnn():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(lstm_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation="softmax", name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
@@ -394,7 +401,7 @@ def create_rcnn():
     # Add the output Layers
     output_layer1 = layers.Dense(50, activation="relu")(pooling_layer)
     output_layer1 = layers.Dropout(0.25)(output_layer1)
-    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation=None, name="ouput_layer")(output_layer1)
+    output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation="softmax", name="ouput_layer")(output_layer1)
 
     # Compile the model
     model = models.Model(inputs=input_layer, outputs=output_layer2)
@@ -406,3 +413,25 @@ classifier = create_rcnn()
 accuracy = train_model(classifier, train_seq_x, train_y, valid_seq_x, is_neural_net=True)
 print ("CNN, Word Embeddings",  accuracy)
 #%%
+import pandas as pd
+import numpy as np
+
+# convert text to sequence of tokens and pad them to ensure equal length vectors 
+test_seq_x = sequence.pad_sequences(token.texts_to_sequences(testing_corpus), maxlen=70)
+predicted_labels = classifier.predict(test_seq_x )
+
+#classifier = linear_model.LogisticRegression()
+# Linear Classifier on Word Level TF IDF Vectors
+#accuracy = train_model(classifier, xtrain_tfidf, train_y, xvalid_tfidf)
+#print (f"LR, WordLevel TF-IDF: {int(accuracy)}% ")
+
+#testing_tfidf = tfidf_vect.transform(testing_corpus)
+#predicted_labels = classifier.predict(testing_tfidf )
+
+classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Cluster':predicted_labels} #Creating dict having doc with the corresponding cluster number.
+predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue']) # Converting it into a dataframe.
+predicted_frame["Machine Classification"] = encoder.inverse_transform(np.argmax(predicted_labels, axis = 1))
+
+# save to file
+predicted_frame.to_excel(input_file + "_AdvancedResult.xlsx")
+print ("Resuls written to " + input_file + "_AdvancedResult.xlsx")

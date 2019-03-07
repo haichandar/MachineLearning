@@ -3,6 +3,7 @@
 
 import pandas as pd
 import string
+import numpy as np
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import KNeighborsClassifier
@@ -83,72 +84,103 @@ integer_encoded = label_encoder.fit_transform(training_output_category)
 transformer = TfidfVectorizer(stop_words='english')
 tfidf = transformer.fit_transform(training_corpus)
 #%%
-from sklearn import model_selection, metrics
-# split the dataset into training and validation datasets 
-train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, integer_encoded)
 
-#transformer_new = TfidfVectorizer(stop_words='english')
-transformer_new = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', max_features=50000)
-tfidf_fit = transformer_new.fit(training_corpus)
-xtrain_tfidf = tfidf_fit.transform(train_x)
-xvalid_tfidf = tfidf_fit.transform(valid_x)
+import matplotlib.pyplot as plt
+Sum_of_squared_distances = []
+k_step = 10
+k_start = 100
+k_max = 200
+K = range(k_start, k_max, k_step)
+for k in K:
+    km = KMeans(n_clusters=k)
+    km = km.fit(tfidf)
+    Sum_of_squared_distances.append(km.inertia_)
 
-def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
-    # fit the training dataset on the classifier
-    classifier.fit(feature_vector_train, label)
-    
-    # predict the labels on validation dataset
-    predictions = classifier.predict(feature_vector_valid)
-   
-#    print (predictions)
-#    print (valid_y)
-    if is_neural_net:
-        predictions = predictions.argmax(axis=-1)
-    
-    return metrics.accuracy_score(predictions, valid_y) *100
+k_optimal = k_start + (Sum_of_squared_distances.index(min(Sum_of_squared_distances)) + 1) * k_step
+
+plt.plot(K, Sum_of_squared_distances, 'bx-')
+plt.xlabel('k')
+plt.ylabel('Sum_of_squared_distances')
+plt.title('Elbow Method For Optimal k')
+plt.show()    
 
 #%%
-#print (xtrain_tfidf)
-# Naive Bayes on Word Level TF IDF Vectors
-accuracy = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
-print ("KNN, WordLevel TF-IDF: ", accuracy)
 
-from sklearn import model_selection, preprocessing, linear_model, naive_bayes, svm
-from sklearn import decomposition, ensemble
-
-# Naive Bayes on Word Level TF IDF Vectors
-accuracy = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf, train_y, xvalid_tfidf)
-print ("NB, WordLevel TF-IDF: ", accuracy)
-
-# Linear Classifier on Word Level TF IDF Vectors
-accuracy = train_model(linear_model.LogisticRegression(), xtrain_tfidf, train_y, xvalid_tfidf)
-print ("LR, WordLevel TF-IDF: ", accuracy)
-
-# SVM on Ngram Level TF IDF Vectors
-accuracy = train_model(svm.SVC(), xtrain_tfidf, train_y, xvalid_tfidf)
-print ("SVM, WordLevel TF-IDF: ", accuracy)
-
-# RF on Word Level TF IDF Vectors
-accuracy = train_model(ensemble.RandomForestClassifier(), xtrain_tfidf, train_y, xvalid_tfidf)
-print ("RF, WordLevel TF-IDF: ", accuracy)
-
-#%%
-#print(tfidf.shape)                        
-
+k_optimal = 20
 # FIRST DO UNSUPERVISED CLUSTERING ON TEXT USING KMeans
-
-modelkmeans = KMeans(n_clusters=num_clusters)
+modelkmeans = KMeans(n_clusters=k_optimal)
 modelkmeans.fit(tfidf)
 clusters = modelkmeans.labels_.tolist()
 
 classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Machine Cluster':clusters, 'Human Classification': training_output_category} #Creating dict having doc with the corresponding cluster number.
 frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Human Classification']) # Converting it into a dataframe.
 
-#print("\n")
-#print(frame) #Print the doc with the labeled cluster number.
-#print("\n")
-#print(frame['Machine Classification'].value_counts()) #Print the counts of doc belonging to each cluster.
+# FIND SIGNIFICANT TERMS IN EACH CLUSTER
+xvalid_tfidf_ngram = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(5,6))
 
+
+cluster_count_list = []
+cluster_tag_list = []
+cluster_themes_dict = {}
+for i in set(clusters):    
+    current_cluster_data = [training_corpus[x] for x in np.where(modelkmeans.labels_ == i)[0]]        
+    
+    try:
+        current_tfs = xvalid_tfidf_ngram.fit_transform(current_cluster_data)
+        current_tf_idfs = dict(zip(xvalid_tfidf_ngram.get_feature_names(), xvalid_tfidf_ngram.idf_))
+        tf_idfs_tuples = current_tf_idfs.items()
+        cluster_themes_dict[i] = sorted(tf_idfs_tuples, key = lambda x: x[1])[:1]
+        cluster_tag_list.append(str(cluster_themes_dict[i][0][0]))
+#        cluster_tag_list.append("".join(format([x[0] for x in cluster_themes_dict[i]])))
+    except:
+        cluster_tag_list.append(current_cluster_data[0])
+        cluster_themes_dict[i] = (current_cluster_data[0], 0)
+
+    cluster_count_list.append(clusters.count(i))
+    print (f'Cluster {i} key words: {cluster_tag_list[i]}')
+
+def NameCluster(cluster_no):
+    return "" + str(cluster_no+1)
+
+plot_frame = pd.DataFrame({'Cluster Count':cluster_count_list, 'Machine Tag': cluster_tag_list, 'Cluster': list(map(NameCluster, set(clusters)))},
+                        index = set(clusters),
+                        columns=['Machine Tag', 'Cluster Count', 'Cluster'])        
+
+def tagCluster(cluster_no):
+    # return the first tagging
+    return cluster_themes_dict[cluster_no][0][0]
+
+list(map(tagCluster, clusters))
+
+#%%
+
+from matplotlib.ticker import PercentFormatter
+
+plot_frame = plot_frame.sort_values(by='Cluster Count',ascending=False)
+plot_frame["Cumulative Percentage"] = plot_frame['Cluster Count'].cumsum()/plot_frame['Cluster Count'].sum()*100
+
+fig, ax = plt.subplots()
+#ax.bar(plot_frame['Machine Tag'], plot_frame["Cluster Count"], color="C0")
+#ax.bar(plot_frame.index, plot_frame["Cluster Count"], color="C0")
+ax.bar(plot_frame['Cluster'], plot_frame["Cluster Count"], color="C0")
+
+ax2 = ax.twinx()
+#ax2.plot(plot_frame['Machine Tag'], plot_frame["cumpercentage"], color="C1", marker="D", ms=7)
+#ax2.plot(plot_frame.index, plot_frame["cumpercentage"], color="C1", marker="D", ms=7)
+ax2.plot(plot_frame['Cluster'], plot_frame["Cumulative Percentage"], color="C1", marker="D", ms=7)
+ax2.yaxis.set_major_formatter(PercentFormatter())
+
+ax.tick_params(axis="y", colors="C0")
+ax2.tick_params(axis="y", colors="C1")
+
+ax.set_title ("Pareto chart of Analyzed Ticket Data", fontsize=12)
+ax.set_ylabel("# of Tickets", fontsize=7)
+ax.set_xlabel("Category #", fontsize=7)
+              
+plt.legend()
+plt.show()
+
+#%%
 # save to file
 frame.to_excel(input_file + "_KMeans_Clusters.xlsx")
 print ("Resuls written to " + input_file + "_KMeans_Clusters.xlsx")
@@ -159,6 +191,7 @@ lookup = lookup.loc[mask['no']]
 lookup = lookup.reset_index()
 lookup = lookup.set_index('Machine Cluster')['Human Classification'].to_dict()
 
+#%%
 
 # SECOND do Clustering the document with KNN classifier - Supervised learning
 # Only possible when you have Manual classification
@@ -188,3 +221,51 @@ predicted_frame["KNN Machine Classification"] = label_encoder.inverse_transform(
 predicted_frame.to_excel(input_file + "_Result.xlsx")
 print ("Resuls written to " + input_file + "_Result.xlsx")
 
+#%%
+from sklearn import model_selection, metrics
+# split the dataset into training and validation datasets 
+train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, integer_encoded)
+
+#transformer_new = TfidfVectorizer(stop_words='english')
+transformer_new = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', max_features=50000)
+tfidf_fit = transformer_new.fit(training_corpus)
+xtrain_tfidf = tfidf_fit.transform(train_x)
+xvalid_tfidf = tfidf_fit.transform(valid_x)
+
+def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
+    # fit the training dataset on the classifier
+    classifier.fit(feature_vector_train, label)
+    
+    # predict the labels on validation dataset
+    predictions = classifier.predict(feature_vector_valid)
+   
+#    print (predictions)
+#    print (valid_y)
+    if is_neural_net:
+        predictions = predictions.argmax(axis=-1)
+    
+    return metrics.accuracy_score(predictions, valid_y) *100
+#%%
+#print (xtrain_tfidf)
+# Naive Bayes on Word Level TF IDF Vectors
+accuracy = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("KNN, WordLevel TF-IDF: ", accuracy)
+
+from sklearn import model_selection, preprocessing, linear_model, naive_bayes, svm
+from sklearn import decomposition, ensemble
+
+# Naive Bayes on Word Level TF IDF Vectors
+accuracy = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("NB, WordLevel TF-IDF: ", accuracy)
+
+# Linear Classifier on Word Level TF IDF Vectors
+accuracy = train_model(linear_model.LogisticRegression(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("LR, WordLevel TF-IDF: ", accuracy)
+
+# SVM on Ngram Level TF IDF Vectors
+accuracy = train_model(svm.SVC(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("SVM, WordLevel TF-IDF: ", accuracy)
+
+# RF on Word Level TF IDF Vectors
+accuracy = train_model(ensemble.RandomForestClassifier(), xtrain_tfidf, train_y, xvalid_tfidf)
+print ("RF, WordLevel TF-IDF: ", accuracy)
