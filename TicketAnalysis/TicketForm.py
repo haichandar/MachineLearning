@@ -69,14 +69,14 @@ class mclass:
         browsebutton.grid(row=1, column=2)
 
         self.fileName = Entry(window, relief=RIDGE, width=50)
-        self.fileName.insert(END, 'T&ADataForAnalysis_AdvancedResult.xlsx')
+        self.fileName.insert(END, 'T&ADataForAnalysis - Sample.xlsx')
         self.fileName.grid (row=1, column=1)
 
         self.Sheetlabel = Label( window, text="Sheet Name" )
         self.Sheetlabel.grid (row=2, column=0)
         
         self.sheetName = Entry(window, relief=RIDGE, width=50)
-        self.sheetName.insert(END, 'Sheet1')
+        self.sheetName.insert(END, 'BaseData')
         self.sheetName.grid (row=2, column=1)
 #
         self.button = Button (window, text="Read Data", command=self.ReadExcelData)
@@ -88,23 +88,32 @@ class mclass:
                 
             column_data = self.excel_data.iloc[0:0,0:30] #Selecting the column that has text.
     
-            ticketlabel = Label( window, text="STEP 1: \n Select the column which has ticket number" )
+            ticketlabel = Label( window, text="STEP 1: \n Select the column which has unique identifier \n (ex: ticket number)" )
             sourcelabel = Label( window, text="STEP 2: \n Select the ticket data \n to analyze" )
             targetlabel = Label( window, text="STEP 3: \n Select the classification column \n(semi-human classified data) \n to be predicted" )
             
-            self.ticket_column_list = Listbox(self.window, selectmode="SINGLE", width=50, height=10)
+            self.ticket_column_list = Listbox(self.window, selectmode=SINGLE, width=50, height=10)
             self.ticket_column_list.configure(exportselection=False)
-            self.source_column_list = Listbox(self.window, selectmode="SINGLE", width=50, height=10)
+            self.source_column_list = Listbox(self.window, selectmode=EXTENDED, width=50, height=10)
             self.source_column_list.configure(exportselection=False)
-            self.target_column_list = Listbox(self.window,selectmode="SINGLE", width=50, height=10)
+            self.target_column_list = Listbox(self.window,selectmode=SINGLE, width=50, height=10)
             self.source_column_list.configure(exportselection=False)
             
             self.target_column_list .insert(END, "I DON'T HAVE THIS DATA")
+            
+            self.source_column_dic = {}
+            ind = 0
             for item in column_data:
                 self.ticket_column_list.insert(END, item)
                 self.source_column_list.insert(END, item)
+                self.source_column_dic[ind] = item
                 self.target_column_list .insert(END, item)
-                
+                ind = ind + 1
+
+            Scrollbar(self.ticket_column_list, orient="vertical")
+            Scrollbar(self.source_column_list, orient="vertical")                
+            Scrollbar(self.target_column_list, orient="vertical")                
+            
             ticketlabel.grid(row=4, column=0)
             self.ticket_column_list.grid(row=5, column=0)
             sourcelabel.grid(row=4, column=1)
@@ -118,112 +127,129 @@ class mclass:
             messagebox.showerror("Read Error", str(e))                
 #%%
     def AnalyzeTickets(self):
-        input_file = "Mytest"
-        Analysis_primary_columnName = self.source_column_list.get(ACTIVE)
-        Analysis_secondary_columnName = None
-        Analysis_Result_columnName = None if self.target_column_list.curselection()[0] == 0 else self.target_column_list.get(ACTIVE)
-        Analysis_ticket_columnName  = self.ticket_column_list.get(ACTIVE)
-        num_clusters = 50 #Change it according to your data.
-
-        stop = set(stopwords.words('english'))
-        exclude = set(string.punctuation)
-        lemma = WordNetLemmatizer()
-        
-        # Cleaning the text sentences so that punctuation marks, stop words & digits are removed
-        def clean(doc):
-            stop_free = " ".join([i for i in doc.lower().split() if i not in stop])
-            punc_free = ''.join(ch for ch in stop_free if ch not in exclude)
-            normalized = " ".join(lemma.lemmatize(word) for word in punc_free.split())
-            processed = re.sub(r"\d+","",normalized)
-            y = processed.split()
-            return y
-
-        #Converting the column of data from excel sheet into a list of documents, where each document corresponds to a group of words.
-        All_ticket_numbers=[]
-        training_corpus=[]
-        training_description=[]
-        testing_corpus=[]
-        testing_description=[]
-        training_ticket_numbers=[]
-        testing_ticket_numbers=[]
-        training_output_category=[]
-
-        ticket_data = self.excel_data.iloc[:,0:30] #Selecting the column that has text.
-        for index,row in ticket_data.iterrows():
+        try:
+            input_file = "Mytest"
             
-            line = ""
-            if (row[Analysis_primary_columnName] and str(row[Analysis_primary_columnName]) != 'nan' ):
-                line = str(row[Analysis_primary_columnName])
-
-                line = line.strip()
-                cleaned = clean(line)
-                cleaned = ' '.join(cleaned)
-        
-                ''' IF MANUAL CLASSFICATION IS AVAILABLE, PUT THEM INTO TRAINING, ELSE TESTING'''
-                if (Analysis_Result_columnName is None or str(row[Analysis_Result_columnName]) != 'nan'):
-                    training_description.append(line)
-                    training_corpus.append(cleaned)
-                    # Add ticket number for indexing
-                    training_ticket_numbers.append(row[Analysis_ticket_columnName])   
-                    if not Analysis_Result_columnName is None:
-                        training_output_category.append(row[Analysis_Result_columnName])   
-                else:
-                    testing_description.append(line)
-                    testing_corpus.append(cleaned)
-                    testing_ticket_numbers.append(row[Analysis_ticket_columnName])   
-                All_ticket_numbers.append(row[Analysis_ticket_columnName])
-        
-        label_encoder = LabelEncoder()
-        integer_encoded = label_encoder.fit_transform(training_output_category)
-        
-        #Count Vectoriser then tidf transformer
-        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words='english')
-        tfidf = transformer.fit_transform(training_corpus)
-
-        # Perform unsupervised clustering and get cluster resullts
-        modelkmeans, clusters = self.PerformClustering(tfidf);
-        
-        # IF NO EXISTING MANUAL TAG AVAILABLE, PERFORM UNSUPERVISED LEARNING
-        if Analysis_Result_columnName is None:         
-
-            # Analyze the clustering and come up with tagging to plot and generate excel
-            plot_frame, cluster_themes_dict = self.AnalyzeClustering(clusters, modelkmeans, training_corpus)
-
-            def tagCluster(cluster_no):
-                # return the first tagging
-                return cluster_themes_dict[cluster_no][0][0]
-            
-            classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Machine Cluster':clusters, 'Machine Tag': list(map(tagCluster, clusters))} 
-            excel_frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Machine Tag'])        
-
-            # Show your results in pop-up, a pareto chart and a summary of clusters
-            self.PlotResults(plot_frame, excel_frame, input_file)
-        else:
-            classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Machine Cluster':clusters, 'Human Tag': training_output_category} #Creating dict having doc with the corresponding cluster number.
-            frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Human Tag']) # Converting it into a dataframe.
-
-            # do prediction only if testing data is available
-            if len(testing_corpus) > 0:
-#                lookup = frame.groupby(['Machine Cluster', 'Human Classification'])['Human Classification'].agg({'no':'count'})
-#                mask = lookup.groupby(level=0).agg('idxmax')
-#                lookup = lookup.loc[mask['no']]
-#                lookup = lookup.reset_index()
-#                lookup = lookup.set_index('Machine Cluster')['Human Classification'].to_dict()
+            items = self.source_column_list.curselection()
+            Analysis_primary_columnNames = [self.source_column_dic[int(item)] for item in items]
+            Analysis_Result_columnName = None if self.target_column_list.curselection()[0] == 0 else self.target_column_list.get(ACTIVE)
+            Analysis_ticket_columnName  = self.ticket_column_list.get(ACTIVE)
     
-                modelknn = KNeighborsClassifier(n_neighbors=25)
-                modelknn.fit(tfidf, integer_encoded)
-                testing_tfidf = transformer.transform(testing_corpus)
+            stop = set(stopwords.words('english'))
+            exclude = set(string.punctuation)
+            lemma = WordNetLemmatizer()
+            
+            # Cleaning the text sentences so that punctuation marks, stop words & digits are removed
+            def clean(doc):
+                stop_free = " ".join([i for i in doc.lower().split() if i not in stop])
+                punc_free = ''.join(ch for ch in stop_free if ch not in exclude)
+                normalized = " ".join(lemma.lemmatize(word) for word in punc_free.split())
+                processed = re.sub(r"\d+","",normalized)
+                y = processed.split()
+                return y
+    
+            #Converting the column of data from excel sheet into a list of documents, where each document corresponds to a group of words.
+            All_ticket_numbers=[]
+            training_corpus=[]
+            training_description=[]
+            testing_corpus=[]
+            testing_description=[]
+            training_ticket_numbers=[]
+            testing_ticket_numbers=[]
+            training_output_category=[]
+    
+            ticket_data = self.excel_data.iloc[:,0:30] #Selecting the column that has text.
+    
+    
+            # Trying to add a new column which will hold all the selected columns
+            New_Analysis_columnName = "MasterIssue"
+            ticket_data[New_Analysis_columnName] = ticket_data[Analysis_primary_columnNames[0]]
+            ticket_data[New_Analysis_columnName]
+            ticket_data.drop(columns=[Analysis_primary_columnNames[0]])
+            Analysis_primary_columnNames.remove(Analysis_primary_columnNames[0])
+            for item in Analysis_primary_columnNames:
+                ticket_data[New_Analysis_columnName] = ticket_data[New_Analysis_columnName] + " " + ticket_data[item] 
+    
+            ticket_data.drop(columns=Analysis_primary_columnNames)
+    
+            for index,row in ticket_data.iterrows():
+    #            print (row[New_Analysis_columnName])
                 
-                predicted_labels_knn = modelknn.predict(testing_tfidf )
-#                predicted_labels_kmeans = modelkmeans.predict(testing_tfidf )
+                line = ""
+                if (row[New_Analysis_columnName] and str(row[New_Analysis_columnName]) != 'nan' ):
+                    line = str(row[New_Analysis_columnName])
+    
+                    line = line.strip()
+                    cleaned = clean(line)
+                    cleaned = ' '.join(cleaned)
+            
+                    ''' IF MANUAL CLASSFICATION IS AVAILABLE, PUT THEM INTO TRAINING, ELSE TESTING'''
+                    if (Analysis_Result_columnName is None or str(row[Analysis_Result_columnName]) != 'nan'):
+                        training_description.append(line)
+                        training_corpus.append(cleaned)
+                        # Add ticket number for indexing
+                        training_ticket_numbers.append(row[Analysis_ticket_columnName])   
+                        if not Analysis_Result_columnName is None:
+                            training_output_category.append(row[Analysis_Result_columnName])   
+                    else:
+                        testing_description.append(line)
+                        testing_corpus.append(cleaned)
+                        testing_ticket_numbers.append(row[Analysis_ticket_columnName])   
+                    All_ticket_numbers.append(row[Analysis_ticket_columnName])
+            
+            label_encoder = LabelEncoder()
+            integer_encoded = label_encoder.fit_transform(training_output_category)
+            
+            # Perform unsupervised clustering and get cluster resullts
+            modelkmeans, clusters = self.PerformClustering(training_corpus);
+            
+            # IF NO EXISTING MANUAL TAG AVAILABLE, PERFORM UNSUPERVISED LEARNING
+            if Analysis_Result_columnName is None:         
+    
+                # Analyze the clustering and come up with tagging to plot and generate excel
+                plot_frame, cluster_themes_dict = self.AnalyzeClustering(clusters, modelkmeans, training_corpus)
+    
+                def tagCluster(cluster_no):
+                    # return the first tagging
+                    return cluster_themes_dict[cluster_no][0][0]
                 
-                classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Cluster':predicted_labels_kmeans} #Creating dict having doc with the corresponding cluster number.
-                predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster']) # Converting it into a dataframe.
-                predicted_frame["New Tagging"] = label_encoder.inverse_transform(predicted_labels_knn)
+                classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Machine Cluster':clusters, 'Machine Tag': list(map(tagCluster, clusters))} 
+                excel_frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Machine Tag'])        
+    
+                # Show your results in pop-up, a pareto chart and a summary of clusters
+                self.PlotResults(plot_frame, excel_frame, input_file)
+            else:
                 
-                # save to file
-                predicted_frame.to_excel(input_file + "_Result.xlsx")
-                messagebox.showinfo("Success", "Predicted Results written to " + input_file + "_Result.xlsx")
+                transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(5,6), max_features=5000)
+                tfidf = transformer.fit_transform(training_corpus)
+                
+                classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Machine Cluster':clusters, 'Human Tag': training_output_category} #Creating dict having doc with the corresponding cluster number.
+                frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Human Tag']) # Converting it into a dataframe.
+    
+                # do prediction only if testing data is available
+                if len(testing_corpus) > 0:
+    #                lookup = frame.groupby(['Machine Cluster', 'Human Classification'])['Human Classification'].agg({'no':'count'})
+    #                mask = lookup.groupby(level=0).agg('idxmax')
+    #                lookup = lookup.loc[mask['no']]
+    #                lookup = lookup.reset_index()
+    #                lookup = lookup.set_index('Machine Cluster')['Human Classification'].to_dict()
+        
+                    modelknn = KNeighborsClassifier(n_neighbors=25)
+                    modelknn.fit(tfidf, integer_encoded)
+                    testing_tfidf = transformer.transform(testing_corpus)
+                    
+                    predicted_labels_knn = modelknn.predict(testing_tfidf )
+    #                predicted_labels_kmeans = modelkmeans.predict(testing_tfidf )
+                    
+                    classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Cluster':predicted_labels_kmeans} #Creating dict having doc with the corresponding cluster number.
+                    predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster']) # Converting it into a dataframe.
+                    predicted_frame["New Tagging"] = label_encoder.inverse_transform(predicted_labels_knn)
+                    
+                    # save to file
+                    predicted_frame.to_excel(input_file + "_Result.xlsx")
+                    messagebox.showinfo("Success", "Predicted Results written to " + input_file + "_Result.xlsx")
+        except Exception as e:
+            messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
 
 #%%
     def ExportData(self, excel_frame, input_file):
@@ -232,12 +258,18 @@ class mclass:
         messagebox.showinfo("Success", "Automated Machine Clustering generated and written to " + input_file + "_Clusters.xlsx")
 
 #%%
-    def PerformClustering(self, tfidf):        
-#        import matplotlib.pyplot
+    def PerformClustering(self, training_corpus):        
+
+        
+        #Count Vectoriser then tidf transformer
+        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words='english')
+#        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
+        tfidf = transformer.fit_transform(training_corpus)
+
         Sum_of_squared_distances = []
-        k_step = 20
+        k_step = 10
         k_start = 10
-        k_max = 100
+        k_max = 50
         K = range(k_start, k_max, k_step)
         for k in K:
             km = KMeans(n_clusters=k)
@@ -320,9 +352,9 @@ class mclass:
         ax2.tick_params(axis="y", colors="C1")
 
         fig.legend()
-        ax.set_title ("RESULTS - Pareto chart of Analyzed Ticket Data", fontsize=20)
-        ax.set_ylabel("# of Tickets", fontsize=7)
-        ax.set_xlabel("Category #", fontsize=7)
+        ax.set_title ("RESULTS - Summary of categorized Ticket Data (Most contributing to least contributing categories)", fontsize=20)
+        ax.set_ylabel("# of Tickets", fontsize=10)
+        ax.set_xlabel("Category #", fontsize=10)
 
         canvas = FigureCanvasTkAgg(fig, master=popup_window )
 #            canvas.draw()
