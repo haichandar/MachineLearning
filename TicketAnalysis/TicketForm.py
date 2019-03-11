@@ -9,11 +9,12 @@ Created on Tue Mar  5 17:28:38 2019
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import PercentFormatter
+import pylab as pl
 
 import numpy as np
 import pandas as pd
 import string
-from PIL import ImageTk, Image
+from PIL import ImageTk
 import PIL
 
 from tkinter import *
@@ -24,6 +25,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import LabelEncoder
+from sklearn.decomposition import TruncatedSVD
 
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -69,14 +71,14 @@ class mclass:
         browsebutton.grid(row=1, column=2)
 
         self.fileName = Entry(window, relief=RIDGE, width=50)
-        self.fileName.insert(END, 'T&ADataForAnalysis - Sample.xlsx')
+        self.fileName.insert(END, 'T&ADataForAnalysis_NonCluster.xlsx')
         self.fileName.grid (row=1, column=1)
 
         self.Sheetlabel = Label( window, text="Sheet Name" )
         self.Sheetlabel.grid (row=2, column=0)
         
         self.sheetName = Entry(window, relief=RIDGE, width=50)
-        self.sheetName.insert(END, 'BaseData')
+        self.sheetName.insert(END, 'Sheet1')
         self.sheetName.grid (row=2, column=1)
 #
         self.button = Button (window, text="Read Data", command=self.ReadExcelData)
@@ -164,13 +166,13 @@ class mclass:
             # Trying to add a new column which will hold all the selected columns
             New_Analysis_columnName = "MasterIssue"
             ticket_data[New_Analysis_columnName] = ticket_data[Analysis_primary_columnNames[0]]
-            ticket_data[New_Analysis_columnName]
-            ticket_data.drop(columns=[Analysis_primary_columnNames[0]])
+#            ticket_data[New_Analysis_columnName]
+#            ticket_data.drop(columns=[Analysis_primary_columnNames[0]])
             Analysis_primary_columnNames.remove(Analysis_primary_columnNames[0])
             for item in Analysis_primary_columnNames:
-                ticket_data[New_Analysis_columnName] = ticket_data[New_Analysis_columnName] + " " + ticket_data[item] 
+                ticket_data[New_Analysis_columnName] = ticket_data[New_Analysis_columnName] + " " + str(ticket_data[item])
     
-            ticket_data.drop(columns=Analysis_primary_columnNames)
+#            ticket_data.drop(columns=Analysis_primary_columnNames)
     
             for index,row in ticket_data.iterrows():
     #            print (row[New_Analysis_columnName])
@@ -200,18 +202,19 @@ class mclass:
             label_encoder = LabelEncoder()
             integer_encoded = label_encoder.fit_transform(training_output_category)
             
-            # Perform unsupervised clustering and get cluster resullts
-            modelkmeans, clusters = self.PerformClustering(training_corpus);
             
             # IF NO EXISTING MANUAL TAG AVAILABLE, PERFORM UNSUPERVISED LEARNING
             if Analysis_Result_columnName is None:         
     
+                # Perform unsupervised clustering and get cluster resullts
+                modelkmeans, clusters = self.PerformClustering(training_corpus);
+
                 # Analyze the clustering and come up with tagging to plot and generate excel
                 plot_frame, cluster_themes_dict = self.AnalyzeClustering(clusters, modelkmeans, training_corpus)
     
                 def tagCluster(cluster_no):
                     # return the first tagging
-                    return cluster_themes_dict[cluster_no][0][0]
+                    return cluster_themes_dict[cluster_no][0][0].upper()
                 
                 classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Machine Cluster':clusters, 'Machine Tag': list(map(tagCluster, clusters))} 
                 excel_frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Machine Tag'])        
@@ -219,35 +222,38 @@ class mclass:
                 # Show your results in pop-up, a pareto chart and a summary of clusters
                 self.PlotResults(plot_frame, excel_frame, input_file)
             else:
-                
+                print ("Entered ELSE")
                 transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(5,6), max_features=5000)
                 tfidf = transformer.fit_transform(training_corpus)
                 
-                classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Machine Cluster':clusters, 'Human Tag': training_output_category} #Creating dict having doc with the corresponding cluster number.
-                frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Human Tag']) # Converting it into a dataframe.
+                classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Human Tag': training_output_category, 'Machine Tag': training_output_category} #Creating dict having doc with the corresponding cluster number.
+                excel_frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Human Tag', 'Machine Tag']) # Converting it into a dataframe.
     
                 # do prediction only if testing data is available
-                if len(testing_corpus) > 0:
-    #                lookup = frame.groupby(['Machine Cluster', 'Human Classification'])['Human Classification'].agg({'no':'count'})
-    #                mask = lookup.groupby(level=0).agg('idxmax')
-    #                lookup = lookup.loc[mask['no']]
-    #                lookup = lookup.reset_index()
-    #                lookup = lookup.set_index('Machine Cluster')['Human Classification'].to_dict()
-        
+                if len(testing_corpus) > 0:        
                     modelknn = KNeighborsClassifier(n_neighbors=25)
                     modelknn.fit(tfidf, integer_encoded)
                     testing_tfidf = transformer.transform(testing_corpus)
                     
                     predicted_labels_knn = modelknn.predict(testing_tfidf )
-    #                predicted_labels_kmeans = modelkmeans.predict(testing_tfidf )
                     
-                    classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Cluster':predicted_labels_kmeans} #Creating dict having doc with the corresponding cluster number.
-                    predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster']) # Converting it into a dataframe.
-                    predicted_frame["New Tagging"] = label_encoder.inverse_transform(predicted_labels_knn)
+                    classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Tag':label_encoder.inverse_transform(predicted_labels_knn)} #Creating dict having doc with the corresponding cluster number.
+                    predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Tag']) # Converting it into a dataframe.                    
+                    excel_frame = pd.concat([excel_frame, predicted_frame], sort=False)
+                    
+
+                    plot_frame = excel_frame[['Machine Tag','Issue']].groupby('Machine Tag').count()
+                    plot_frame.columns = ["Cluster Count"]
+                    plot_frame["Cluster"] = plot_frame.index
+                    plot_frame["Machine Tag"] = plot_frame.index
+                    print (plot_frame)
+
+                    
+                    self.PlotResults(plot_frame, excel_frame, input_file)
                     
                     # save to file
-                    predicted_frame.to_excel(input_file + "_Result.xlsx")
-                    messagebox.showinfo("Success", "Predicted Results written to " + input_file + "_Result.xlsx")
+#                    predicted_frame.to_excel(input_file + "_Result.xlsx")
+#                    messagebox.showinfo("Success", "Predicted Results written to " + input_file + "_Result.xlsx")
         except Exception as e:
             messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
 
@@ -267,9 +273,9 @@ class mclass:
         tfidf = transformer.fit_transform(training_corpus)
 
         Sum_of_squared_distances = []
-        k_step = 10
-        k_start = 10
-        k_max = 50
+        k_step = 1
+        k_start = 1
+        k_max = 3
         K = range(k_start, k_max, k_step)
         for k in K:
             km = KMeans(n_clusters=k)
@@ -278,7 +284,7 @@ class mclass:
         
         k_optimal = k_start + (Sum_of_squared_distances.index(min(Sum_of_squared_distances)) + 1) * k_step
                 
-        fig = Figure(figsize=(4,4))
+        fig = Figure(figsize=(6,4))
         plt = fig.add_subplot(111)
         plt.plot(K, Sum_of_squared_distances, 'bx-')
         plt.set_title ("Elbow Method For Optimal cluster #", fontsize=12)
@@ -286,14 +292,28 @@ class mclass:
         plt.set_xlabel("k", fontsize=7)
 
         canvas = FigureCanvasTkAgg(fig, master=self.window)
-        canvas.get_tk_widget().grid(row=7, column=1)
+        canvas.get_tk_widget().grid(row=7, column=0)
         canvas.draw()
 
-        print (f"clusters chosen {k_optimal}")
+        print ("clusters chosen "+ str(k_optimal))
         # FIRST DO UNSUPERVISED CLUSTERING ON TEXT USING KMeans
         modelkmeans = KMeans(n_clusters=k_optimal)
         modelkmeans.fit(tfidf)
         clusters = modelkmeans.labels_.tolist()
+                
+        svd = TruncatedSVD(n_components=2, n_iter=7, random_state=42)
+        svd.fit(tfidf)
+        svd_2d = svd.transform(tfidf)
+        fig2 = pl.figure('K-means with ' + str(k_optimal) + ' clusters')
+        pl.scatter(svd_2d[:, 0], svd_2d[:, 1], c=modelkmeans.labels_ * 10, alpha=0.2, cmap='viridis')
+        pl.title("Ticket similarities in 2D view. Each circle is a ticket")
+#        pl.legend()
+#        pl.show()
+        
+        canvas = FigureCanvasTkAgg(fig2, master=self.window)
+        canvas.get_tk_widget().grid(row=7, column=2)
+        canvas.draw()
+        
         return modelkmeans, clusters
 
 #%%
@@ -357,7 +377,6 @@ class mclass:
         ax.set_xlabel("Category #", fontsize=10)
 
         canvas = FigureCanvasTkAgg(fig, master=popup_window )
-#            canvas.draw()
 
         tree = ttk.Treeview(popup_window)
         
@@ -369,11 +388,19 @@ class mclass:
                 
         i = 0
         for clusterindex, row in plot_frame.iterrows():
-            id2 = tree.insert("", i, row["Cluster"], text=f'Category {clusterindex + 1} - Machine Tag -> {row["Machine Tag"].upper()} - {row["Cluster Count"]} tickets')
-            
-            for excelindex, excelrow in excel_frame.iterrows():
-                if (clusterindex == excelrow['Machine Cluster'] ):
-                    tree.insert(id2, "end", excelindex, text=excelindex, values=(excelrow['Transformed Data'],excelrow['Issue']))
+#            id2 = tree.insert("", i, row["Cluster"], text=f'Category {clusterindex + 1} - Machine Tag -> {row["Machine Tag"].upper()} - {row["Cluster Count"]} tickets')
+            try:
+                id2 = tree.insert("", i, row["Cluster"], text="Category "+ str(clusterindex + 1) + " - Machine Tag -> " + row["Machine Tag"].upper() +" - " + str(row["Cluster Count"]) + " tickets")            
+                for excelindex, excelrow in excel_frame.iterrows():
+                    if (clusterindex == excelrow['Machine Cluster'] ):
+                        tree.insert(id2, "end", excelindex, text=excelindex, values=(excelrow['Transformed Data'],excelrow['Issue']))
+            # handles parameters in different way
+            except:
+                id2 = tree.insert("", i, row["Cluster"], text="Tag -> " + row["Machine Tag"].upper() +" - " + str(row["Cluster Count"]) + " tickets")            
+                for excelindex, excelrow in excel_frame.iterrows():
+                    if (clusterindex == excelrow['Machine Tag'] ):
+                        tree.insert(id2, "end", excelindex, text=excelindex, values=(excelrow['Transformed Data'],excelrow['Issue']))
+
             i+= 1
             
         canvas.get_tk_widget().pack()
