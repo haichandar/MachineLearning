@@ -91,7 +91,7 @@ class mclass:
             column_data = self.excel_data.iloc[0:0,0:30] #Selecting the column that has text.
     
             ticketlabel = Label( window, text="STEP 1: \n Select the column which has unique identifier \n (ex: ticket number)" )
-            sourcelabel = Label( window, text="STEP 2: \n Select the ticket data \n to analyze" )
+            sourcelabel = Label( window, text="STEP 2: \n Select the ticket data \n to analyze\n(Multiple fields can be selected)" )
             targetlabel = Label( window, text="STEP 3: \n Select the classification column \n(semi-human classified data) \n to be predicted" )
             
             self.ticket_column_list = Listbox(self.window, selectmode=SINGLE, width=50, height=10)
@@ -222,7 +222,6 @@ class mclass:
                 # Show your results in pop-up, a pareto chart and a summary of clusters
                 self.PlotResults(plot_frame, excel_frame, input_file)
             else:
-                print ("Entered ELSE")
                 transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(5,6), max_features=5000)
                 tfidf = transformer.fit_transform(training_corpus)
                 
@@ -246,14 +245,9 @@ class mclass:
                     plot_frame.columns = ["Cluster Count"]
                     plot_frame["Cluster"] = plot_frame.index
                     plot_frame["Machine Tag"] = plot_frame.index
-                    print (plot_frame)
-
                     
                     self.PlotResults(plot_frame, excel_frame, input_file)
                     
-                    # save to file
-#                    predicted_frame.to_excel(input_file + "_Result.xlsx")
-#                    messagebox.showinfo("Success", "Predicted Results written to " + input_file + "_Result.xlsx")
         except Exception as e:
             messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
 
@@ -276,13 +270,13 @@ class mclass:
         k_step = 1
         k_start = 1
         k_max = 3
-        K = range(k_start, k_max, k_step)
+        K = range(k_start, k_max + 1, k_step)
         for k in K:
             km = KMeans(n_clusters=k)
             km = km.fit(tfidf)
             Sum_of_squared_distances.append(km.inertia_)
         
-        k_optimal = k_start + (Sum_of_squared_distances.index(min(Sum_of_squared_distances)) + 1) * k_step
+        k_optimal = k_start + Sum_of_squared_distances.index(min(Sum_of_squared_distances)) * k_step
                 
         fig = Figure(figsize=(6,4))
         plt = fig.add_subplot(111)
@@ -305,6 +299,7 @@ class mclass:
         svd.fit(tfidf)
         svd_2d = svd.transform(tfidf)
         fig2 = pl.figure('K-means with ' + str(k_optimal) + ' clusters')
+        fig2.clf()
         pl.scatter(svd_2d[:, 0], svd_2d[:, 1], c=modelkmeans.labels_ * 10, alpha=0.2, cmap='viridis')
         pl.title("Ticket similarities in 2D view. Each circle is a ticket")
 #        pl.legend()
@@ -394,7 +389,7 @@ class mclass:
                 for excelindex, excelrow in excel_frame.iterrows():
                     if (clusterindex == excelrow['Machine Cluster'] ):
                         tree.insert(id2, "end", excelindex, text=excelindex, values=(excelrow['Transformed Data'],excelrow['Issue']))
-            # handles parameters in different way
+            # handles parameters in different way 
             except:
                 id2 = tree.insert("", i, row["Cluster"], text="Tag -> " + row["Machine Tag"].upper() +" - " + str(row["Cluster Count"]) + " tickets")            
                 for excelindex, excelrow in excel_frame.iterrows():
@@ -408,6 +403,53 @@ class mclass:
 
         exportbutton = Button(popup_window, text="Export the Results", command=self.ExportData(excel_frame, input_file))
         exportbutton.pack()
+
+#%%
+    def RunTrainingModels(training_corpus, integer_encoded):
+        from sklearn import model_selection, metrics, preprocessing, linear_model, naive_bayes, svm, ensemble
+
+        def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
+            # fit the training dataset on the classifier
+            classifier.fit(feature_vector_train, label)
+            
+            # predict the labels on validation dataset
+            predictions = classifier.predict(feature_vector_valid)
+           
+        #    print (predictions)
+        #    print (valid_y)
+            if is_neural_net:
+                predictions = predictions.argmax(axis=-1)
+            
+            return metrics.accuracy_score(predictions, valid_y) *100
+
+
+        # split the dataset into training and validation datasets 
+        train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, integer_encoded)
+        
+        #transformer_new = TfidfVectorizer(stop_words='english')
+        transformer_new = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', max_features=50000)
+        tfidf_fit = transformer_new.fit(training_corpus)
+        xtrain_tfidf = tfidf_fit.transform(train_x)
+        xvalid_tfidf = tfidf_fit.transform(valid_x)
+
+        accuracy = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
+        print ("KNN, WordLevel TF-IDF: ", accuracy)
+                
+        # Naive Bayes on Word Level TF IDF Vectors
+        accuracy = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf, train_y, xvalid_tfidf)
+        print ("NB, WordLevel TF-IDF: ", accuracy)
+        
+        # Linear Classifier on Word Level TF IDF Vectors
+        accuracy = train_model(linear_model.LogisticRegression(), xtrain_tfidf, train_y, xvalid_tfidf)
+        print ("LR, WordLevel TF-IDF: ", accuracy)
+        
+        # SVM on Ngram Level TF IDF Vectors
+        accuracy = train_model(svm.SVC(), xtrain_tfidf, train_y, xvalid_tfidf)
+        print ("SVM, WordLevel TF-IDF: ", accuracy)
+        
+        # RF on Word Level TF IDF Vectors
+        accuracy = train_model(ensemble.RandomForestClassifier(), xtrain_tfidf, train_y, xvalid_tfidf)
+        print ("RF, WordLevel TF-IDF: ", accuracy)
 
 #%%
 window= Tk()
