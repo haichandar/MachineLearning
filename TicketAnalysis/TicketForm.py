@@ -5,11 +5,11 @@ Created on Tue Mar  5 17:28:38 2019
 @author: Chandar_S
 """
 
-#import matplotlib
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import PercentFormatter
 import pylab as pl
+from pylab import rc
 
 import numpy as np
 import pandas as pd
@@ -27,6 +27,10 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import TruncatedSVD
+import xgboost
+from keras.preprocessing import text, sequence
+from keras import layers, models, optimizers
+
 
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -38,7 +42,6 @@ class mclass:
         self.window = window
         
         window.title("AI Ops Suite")
-#        window.geometry("+50+150")
 
         image = PIL.Image.open("Images/MainLogo.png")
         image = image.resize((112, 56), PIL.Image.ANTIALIAS)
@@ -81,7 +84,7 @@ class mclass:
         self.sheetName = Entry(window, relief=RIDGE, width=50)
         self.sheetName.insert(END, 'Sheet1')
         self.sheetName.grid (row=2, column=1)
-#
+
         self.button = Button (window, text="Read Data", command=self.ReadExcelData)
         self.button.grid(row=3, column=1)
 #%%
@@ -227,12 +230,9 @@ class mclass:
                 excel_frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Human Tag', 'Machine Tag']) # Converting it into a dataframe.
     
                 # do prediction only if testing data is available
-                if len(testing_corpus) > 0:        
-                    algorithm_list, accuracy_list = self.RunTrainingModels(training_corpus, integer_encoded)
-                    
-                    for algorithm_name, accuracy in zip(accuracy_list, algorithm_list):
-                        print ("Algorithm -> " , algorithm_name , " ||| Accuracy -> " , int(accuracy) , "%\n")
-                    
+                if len(testing_corpus) > 0:
+                    predicted_labels = self.RunTrainingModels(training_corpus, integer_encoded, testing_corpus)
+                                        
     #                transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words='english')
     #                transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
     #                tfidf = transformer.fit_transform(training_corpus)
@@ -242,17 +242,17 @@ class mclass:
 #                    
 #                    predicted_labels_knn = modelknn.predict(testing_tfidf )
 #                    
-#                    classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Tag':label_encoder.inverse_transform(predicted_labels_knn)} #Creating dict having doc with the corresponding cluster number.
-#                    predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Tag']) # Converting it into a dataframe.                    
-#                    excel_frame = pd.concat([excel_frame, predicted_frame], sort=False)
-#                    
-#
-#                    plot_frame = excel_frame[['Machine Tag','Issue']].groupby('Machine Tag').count()
-#                    plot_frame.columns = ["Cluster Count"]
-#                    plot_frame["Cluster"] = plot_frame.index
-#                    plot_frame["Machine Tag"] = plot_frame.index
-#                    
-#                    self.PlotResults(plot_frame, excel_frame, input_file)
+                    classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Tag':label_encoder.inverse_transform(predicted_labels)} #Creating dict having doc with the corresponding cluster number.
+                    predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Tag']) # Converting it into a dataframe.                    
+                    excel_frame = pd.concat([excel_frame, predicted_frame], sort=False)
+                    
+
+                    plot_frame = excel_frame[['Machine Tag','Issue']].groupby('Machine Tag').count()
+                    plot_frame.columns = ["Cluster Count"]
+                    plot_frame["Cluster"] = plot_frame.index
+                    plot_frame["Machine Tag"] = plot_frame.index
+                    
+                    self.PlotResults(plot_frame, excel_frame, input_file)
                     
         except Exception as e:
             messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
@@ -284,16 +284,16 @@ class mclass:
         
         k_optimal = k_start + Sum_of_squared_distances.index(min(Sum_of_squared_distances)) * k_step
                 
-        fig = Figure(figsize=(6,4))
-        plt = fig.add_subplot(111)
-        plt.plot(K, Sum_of_squared_distances, 'bx-')
-        plt.set_title ("Elbow Method For Optimal cluster #", fontsize=12)
-        plt.set_ylabel("Sum_of_squared_distances", fontsize=7)
-        plt.set_xlabel("k", fontsize=7)
-
-        canvas = FigureCanvasTkAgg(fig, master=self.window)
-        canvas.get_tk_widget().grid(row=7, column=0)
-        canvas.draw()
+#        fig = Figure(figsize=(6,4))
+#        plt = fig.add_subplot(111)
+#        plt.plot(K, Sum_of_squared_distances, 'bx-')
+#        plt.set_title ("Elbow Method For Optimal cluster #", fontsize=12)
+#        plt.set_ylabel("Sum_of_squared_distances", fontsize=7)
+#        plt.set_xlabel("k", fontsize=7)
+#
+#        canvas = FigureCanvasTkAgg(fig, master=self.window)
+#        canvas.get_tk_widget().grid(row=7, column=0)
+#        canvas.draw()
 
         print ("clusters chosen "+ str(k_optimal))
         # FIRST DO UNSUPERVISED CLUSTERING ON TEXT USING KMeans
@@ -305,13 +305,17 @@ class mclass:
         svd = TruncatedSVD(n_components=2, n_iter=7, random_state=42)
         svd.fit(tfidf)
         svd_2d = svd.transform(tfidf)
-        fig2 = pl.figure('K-means with ' + str(k_optimal) + ' clusters')
+        
+        rc('figure', figsize=(15, 4))
+        fig2 = pl.figure('K-means with ' + str(k_optimal) + ' clusters',)
         fig2.clf()
         pl.scatter(svd_2d[:, 0], svd_2d[:, 1], c=cluster_labels, alpha=0.2, cmap='viridis')
         pl.title("Ticket similarities in 2D view. Each circle is a ticket")
         
         canvas = FigureCanvasTkAgg(fig2, master=self.window)
-        canvas.get_tk_widget().grid(row=7, column=2)
+#        canvas.get_tk_widget().grid(row=7, column=2)
+        canvas.get_tk_widget().grid(row=7, column=0, columnspan = 3)
+
         canvas.draw()
         
         return cluster_labels, clusters
@@ -351,34 +355,6 @@ class mclass:
             except Exception as ex:
                 print ("Exception", ex)
 
-#            try:
-#                current_tf_idfs = dict(zip(xvalid_tfidf_ngram.get_feature_names(), xvalid_tfidf_ngram.idf_))
-#                tf_idfs_tuples = current_tf_idfs.items()
-#                cluster_themes_dict[i] = sorted(tf_idfs_tuples, key = lambda x: x[1])[:1]
-#                cluster_tag_list.append(str(cluster_themes_dict[i][0][0]))
-##                    cluster_tag_list.append("".join(format([x[0] for x in cluster_themes_dict[i]])))
-#            except:
-#                cluster_themes_dict[i] = (current_cluster_data[0], 0)
-#                cluster_tag_list.append(current_cluster_data[0])
-
-
-#            # create a count vectorizer object 
-#            count_vect = CountVectorizer(analyzer='word', 
-#                                         token_pattern=r'\w{1,}',
-#                                         max_df=0.95, min_df=2,
-#                                         max_features=1000,
-#                                         stop_words='english')
-#            xtrain_count = count_vect.fit_transform(current_cluster_data)
-
-            # train a LDA Model
-#            lda_model = decomposition.LatentDirichletAllocation(n_components=3, 
-#                                                                learning_method='online', 
-#                                                                max_iter=20)
-#            X_topics = lda_model.fit_transform(xtrain_count)
-#            vocab = count_vect.get_feature_names()
-
-                
-        
         def NameCluster(cluster_no):
             return "" + str(cluster_no+1)
         
@@ -390,7 +366,6 @@ class mclass:
     #%%
     def PlotResults (self, plot_frame, excel_frame, input_file):
         
-#        print (excel_frame)
         popup_window = Toplevel(self.window)
 
         popup_window.title("Results")
@@ -425,9 +400,8 @@ class mclass:
                 
         i = 0
         for clusterindex, row in plot_frame.iterrows():
-#            id2 = tree.insert("", i, row["Cluster"], text=f'Category {clusterindex + 1} - Machine Tag -> {row["Machine Tag"].upper()} - {row["Cluster Count"]} tickets')
             try:
-                id2 = tree.insert("", i, row["Cluster"], text="Category "+ str(clusterindex + 1) + str(row["Cluster Count"]) + " tickets"  +" - " + row["Machine Tag"].upper())            
+                id2 = tree.insert("", i, row["Cluster"], text="Category "+ str(clusterindex + 1) + " -> " + str(row["Cluster Count"]) + " tickets"  +" - " + row["Machine Tag"].upper())            
                 for excelindex, excelrow in excel_frame.iterrows():
                     if (clusterindex == excelrow['Machine Cluster'] ):
                         tree.insert(id2, "end", excelindex, text=excelindex, values=(excelrow['Transformed Data'],excelrow['Issue']))
@@ -447,7 +421,10 @@ class mclass:
         exportbutton.pack()
 
 #%%
-    def RunTrainingModels(self, training_corpus, integer_encoded):
+    def RunTrainingModels(self, training_corpus, integer_encoded, testing_corpus):
+
+        # split the dataset into training and validation datasets 
+        train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, integer_encoded)
 
         def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
             if is_neural_net:
@@ -462,43 +439,192 @@ class mclass:
                 # predict the labels on validation dataset
                 predictions = classifier.predict(feature_vector_valid)
                 
-            return metrics.accuracy_score(predictions, valid_y) *100
+            return int(metrics.accuracy_score(predictions, valid_y) *100), classifier
 
-        # split the dataset into training and validation datasets 
-        train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, integer_encoded)
-        
+        # word level tf-idf        
         transformer_new = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', max_features=50000)
         tfidf_fit = transformer_new.fit(training_corpus)
         xtrain_tfidf = tfidf_fit.transform(train_x)
         xvalid_tfidf = tfidf_fit.transform(valid_x)
-        
+
+        # ngram level tf-idf 
+        tfidf_vect_ngram = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
+        tfidf_vect_ngram.fit(training_corpus)
+        xtrain_tfidf_ngram =  tfidf_vect_ngram.transform(train_x)
+        xvalid_tfidf_ngram =  tfidf_vect_ngram.transform(valid_x)
+
+        # characters level tf-idf
+        tfidf_vect_ngram_chars = TfidfVectorizer(analyzer='char', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
+        tfidf_vect_ngram_chars.fit(training_corpus)
+        xtrain_tfidf_ngram_chars =  tfidf_vect_ngram_chars.transform(train_x) 
+        xvalid_tfidf_ngram_chars =  tfidf_vect_ngram_chars.transform(valid_x)
+  
         accuracy_list = []
         algorithm_list = []
-        accuracy = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
+        classifer_list = []
+        '''
+        accuracy, classifier = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
         accuracy_list.append(accuracy)
-        algorithm_list.append("KNN, WordLevel TF-IDF")
-                
-        # Naive Bayes on Word Level TF IDF Vectors
-        accuracy = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf, train_y, xvalid_tfidf)
-        accuracy_list.append(accuracy)
-        algorithm_list.append("NB, WordLevel TF-IDF")
+        algorithm_list.append("KNN WL TF-IDF")
+        classifer_list.append(classifier)
+              
         
         # Linear Classifier on Word Level TF IDF Vectors
-        accuracy = train_model(linear_model.LogisticRegression(), xtrain_tfidf, train_y, xvalid_tfidf)
+        accuracy, classifier  = train_model(linear_model.LogisticRegression(), xtrain_tfidf, train_y, xvalid_tfidf)
         accuracy_list.append(accuracy)
-        algorithm_list.append("LR, WordLevel TF-IDF")
+        algorithm_list.append("LR WL TF-IDF")
+        classifer_list.append(classifier)
+
+        # Linear Classifier on Ngram Level TF IDF Vectors
+        accuracy, classifier = train_model(linear_model.LogisticRegression(), xtrain_tfidf_ngram, train_y, xvalid_tfidf_ngram)
+        accuracy_list.append(accuracy)
+        algorithm_list.append("LR N-Gram")
+        classifer_list.append(classifier)
         
         # SVM on Ngram Level TF IDF Vectors
-        accuracy = train_model(svm.SVC(), xtrain_tfidf, train_y, xvalid_tfidf)
+        accuracy, classifier  = train_model(svm.SVC(), xtrain_tfidf, train_y, xvalid_tfidf)
         accuracy_list.append(accuracy)
-        algorithm_list.append("SVM, WordLevel TF-IDF")
+        algorithm_list.append("SVM WL TF-IDF")
+        classifer_list.append(classifier)
+        '''
         
+        # Naive Bayes on Word Level TF IDF Vectors
+        accuracy, classifier  = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf, train_y, xvalid_tfidf)
+        accuracy_list.append(accuracy)
+        algorithm_list.append("NB WL TF-IDF")
+        classifer_list.append(classifier)
+
+        # Naive Bayes on Ngram Level TF IDF Vectors
+        accuracy, classifier = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf_ngram, train_y, xvalid_tfidf_ngram)
+        accuracy_list.append(accuracy)
+        algorithm_list.append("NB N-Gram")
+        classifer_list.append(classifier)
         # RF on Word Level TF IDF Vectors
-        accuracy = train_model(ensemble.RandomForestClassifier(), xtrain_tfidf, train_y, xvalid_tfidf)
+ 
+#        '''
+        accuracy, classifier  = train_model(ensemble.RandomForestClassifier(), xtrain_tfidf, train_y, xvalid_tfidf)
         accuracy_list.append(accuracy)
-        algorithm_list.append("RF, WordLevel TF-IDF")
+        algorithm_list.append("RF WL TF-IDF")
+        classifer_list.append(classifier)
+
+        # Extereme Gradient Boosting on Word Level TF IDF Vectors
+        accuracy, classifier   = train_model(xgboost.XGBClassifier(), xtrain_tfidf.tocsc(), train_y, xvalid_tfidf.tocsc())
+        accuracy_list.append(accuracy)
+        algorithm_list.append("Xgb WL TF-IDF")
+        classifer_list.append(classifier)
         
-        return accuracy_list, algorithm_list
+        # Extereme Gradient Boosting on Character Level TF IDF Vectors
+        accuracy, classifier = train_model(xgboost.XGBClassifier(), xtrain_tfidf_ngram_chars.tocsc(), train_y, xvalid_tfidf_ngram_chars.tocsc())
+        accuracy_list.append(accuracy)
+        algorithm_list.append("Xgb CL")
+        classifer_list.append(classifier)
+#        '''
+        
+#        '''
+        # load the pre-trained word-embedding vectors 
+        embeddings_index = {}
+        for i, line in enumerate(open('glove.6B/glove.6B.300d.txt', encoding="utf8")):
+            values = line.split()
+            embeddings_index[values[0]] = np.asarray(values[1:], dtype='float32')
+
+        # create a tokenizer 
+        token = text.Tokenizer()
+        token.fit_on_texts(training_corpus)
+        word_index = token.word_index
+        
+        # convert text to sequence of tokens and pad them to ensure equal length vectors 
+        train_seq_x = sequence.pad_sequences(token.texts_to_sequences(train_x), maxlen=70)
+        valid_seq_x = sequence.pad_sequences(token.texts_to_sequences(valid_x), maxlen=70)
+        
+        encoder = LabelEncoder()
+        encoded_y = encoder.fit_transform(train_y)
+
+        # create token-embedding mapping
+        embedding_matrix = np.zeros((len(word_index) + 1, 300))
+        for word, i in word_index.items():
+            embedding_vector = embeddings_index.get(word)
+            if embedding_vector is not None:
+                embedding_matrix[i] = embedding_vector
+
+        def create_rcnn():
+            # Add an Input Layer
+            input_layer = layers.Input((70, ))
+        
+            # Add the word embedding Layer
+            embedding_layer = layers.Embedding(len(word_index) + 1, 300, weights=[embedding_matrix], trainable=False)(input_layer)
+            embedding_layer = layers.SpatialDropout1D(0.3)(embedding_layer)
+            
+            # Add the recurrent layer
+            layers.Bidirectional(layers.GRU(50, return_sequences=True))(embedding_layer)
+            
+            # Add the convolutional Layer
+            conv_layer = layers.Convolution1D(100, 3, activation="relu")(embedding_layer)
+        
+            # Add the pooling Layer
+            pooling_layer = layers.GlobalMaxPool1D()(conv_layer)
+        
+            # Add the output Layers
+            output_layer1 = layers.Dense(50, activation="relu")(pooling_layer)
+            output_layer1 = layers.Dropout(0.25)(output_layer1)
+            output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation="softmax", name="ouput_layer")(output_layer1)
+        
+            # Compile the model
+            model = models.Model(inputs=input_layer, outputs=output_layer2)
+            model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy')
+            
+            return model
+        
+        classifier = create_rcnn()
+        accuracy, _ = train_model(classifier, train_seq_x, train_y, valid_seq_x, is_neural_net=True)
+        accuracy_list.append(accuracy)
+        algorithm_list.append("Deep - RCNN")
+        classifer_list.append(classifier)
+
+        fig = Figure(figsize=(15,4))
+        ax = fig.add_subplot(111)
+        ax.bar(algorithm_list, accuracy_list, color="C0")
+        
+        ax.tick_params(axis="y", colors="C0")
+
+#        fig.legend()
+        ax.set_title ("Evaluvated ML Algorithms", fontsize=20)
+        ax.set_ylabel("Accuracy %", fontsize=10)
+        ax.set_xlabel("ML Algorithm", fontsize=10)
+
+        canvas = FigureCanvasTkAgg(fig, master=self.window )
+        canvas.get_tk_widget().grid(row=7, column=0, columnspan = 3)
+
+
+        selected_algorithm = None
+        selected_algorithm_Name = None
+        selected_accuracy = 0
+        for algorithm_name, algorithm, accuracy in zip(algorithm_list, classifer_list, accuracy_list):
+            print ("Algorithm -> " , algorithm_name , " ||| Accuracy -> " , int(accuracy) , "%\n")
+            if (selected_accuracy < accuracy):
+                selected_algorithm = algorithm
+                selected_algorithm_Name = algorithm_name
+                selected_accuracy = accuracy
+        
+        print ("Selected Algorithm ", selected_algorithm_Name, " Accuracy ", selected_accuracy , "%")
+
+        # decide the transformer based on algorithm
+        if "WL TF-IDF" in selected_algorithm_Name:
+            testing_tfidf = transformer_new.transform(testing_corpus)
+        elif "N-Gram" in selected_algorithm_Name:
+           testing_tfidf = tfidf_vect_ngram.transform(testing_corpus)
+        elif "CL" in selected_algorithm_Name:
+            testing_tfidf = tfidf_vect_ngram_chars.transform(testing_corpus)
+        elif "Deep" in selected_algorithm_Name:
+           testing_tfidf = sequence.pad_sequences(token.texts_to_sequences(testing_corpus), maxlen=70)
+            
+        predicted_labels = selected_algorithm.predict(testing_tfidf)
+        
+        # do a reverse transformation for deep learning outputs
+        predicted_labels = encoder.inverse_transform(predicted_labels) if "Deep" in selected_algorithm_Name else predicted_labels
+        print (predicted_labels)
+
+#        '''      
+        return predicted_labels
 
 #%%
 window= Tk()
