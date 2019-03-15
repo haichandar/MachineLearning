@@ -19,13 +19,13 @@ import re
 from keras.utils import  np_utils
 
 ''' HYPER PARAMETERS '''
-input_file = 'T&ADataForAnalysis'
-data=pandas.read_excel(input_file +'.xlsx', sheet_name="BaseData") #Include your data file instead of data.xlsx
+input_file = 'T&ADataForAnalysis_NonCluster'
+data=pandas.read_excel(input_file +'.xlsx', sheet_name="Sheet1") #Include your data file instead of data.xlsx
 ticket_data = data.iloc[:,0:30] #Selecting the column that has text.
-Analysis_primary_columnName = 'Work notes'
-Analysis_secondary_columnName = 'Short description'
-Analysis_Result_columnName = 'SerialNumber'
-Analysis_ticket_columnName  = 'Number'
+Analysis_primary_columnName = 'Issue'
+Analysis_secondary_columnName = 'Machine Classification'
+Analysis_Result_columnName = 'Machine Classification'
+Analysis_ticket_columnName  = 'Ticket'
 testing_corpus=[]
 testing_description=[]
 testing_ticket_numbers=[]
@@ -200,7 +200,7 @@ def train_model(classifier, feature_vector_train, label, feature_vector_valid, i
         
     return metrics.accuracy_score(predictions, valid_y) *100
 #%%
-    
+'''    
 from sklearn.neighbors import KNeighborsClassifier
 
 # Naive Bayes on Word Level TF IDF Vectors
@@ -380,6 +380,7 @@ def create_bidirectional_rnn():
 classifier = create_bidirectional_rnn()
 accuracy = train_model(classifier, train_seq_x, train_y, valid_seq_x, is_neural_net=True)
 print ("RNN-Bidirectional, Word Embeddings",  accuracy)
+'''
 #%%
 def create_rcnn():
     # Add an Input Layer
