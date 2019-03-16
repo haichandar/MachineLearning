@@ -134,7 +134,7 @@ class mclass:
             messagebox.showerror("Read Error", str(e))                
 #%%
     def AnalyzeTickets(self):
-#        try:
+        try:
             input_file = "Mytest"
             
             items = self.source_column_list.curselection()
@@ -179,7 +179,6 @@ class mclass:
 #            ticket_data.drop(columns=Analysis_primary_columnNames)
     
             for index,row in ticket_data.iterrows():
-    #            print (row[New_Analysis_columnName])
                 
                 line = ""
                 if (row[New_Analysis_columnName] and str(row[New_Analysis_columnName]) != 'nan' ):
@@ -244,8 +243,8 @@ class mclass:
                     
                     self.PlotResults(plot_frame, excel_frame, input_file)
                     
-#        except Exception as e:
-#            messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
+        except Exception as e:
+            messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
 
 #%%
     def ExportData(self, excel_frame, input_file):
@@ -627,15 +626,11 @@ class mclass:
         elif "Deep" in selected_algorithm_Name:
            testing_data = sequence.pad_sequences(token.texts_to_sequences(testing_corpus), maxlen=70)
         
-#        print (testing_data)
         predicted_labels = selected_algorithm.predict(testing_data)
         
-#        print (predicted_labels)
         # do a reverse transformation for deep learning outputs
         predicted_labels = label_encoder.inverse_transform(predicted_labels.argmax(axis=-1)) if "Deep" in selected_algorithm_Name else label_encoder.inverse_transform(predicted_labels)
         
-        print (predicted_labels)
-
 #        '''      
         return predicted_labels
 
