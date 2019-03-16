@@ -38,8 +38,9 @@ import re
 
 class mclass:
 
-    def __init__(self,  window):
+    def __init__(self,  window, embeddings_index):
         self.window = window
+        self.embeddings_index = embeddings_index
         
         window.title("AI Ops Suite")
 
@@ -141,7 +142,7 @@ class mclass:
             Analysis_Result_columnName = None if self.target_column_list.curselection()[0] == 0 else self.target_column_list.get(ACTIVE)
             Analysis_ticket_columnName  = self.ticket_column_list.get(ACTIVE)
     
-            stop = set(stopwords.words('spanish'))
+            stop = set(stopwords.words('english'))
             exclude = set(string.punctuation)
             lemma = WordNetLemmatizer()
             
@@ -169,7 +170,7 @@ class mclass:
     
             # Trying to add a new column which will hold all the selected columns
             New_Analysis_columnName = "MasterIssue"
-            ticket_data[New_Analysis_columnName] = ticket_data[Analysis_primary_columnNames[0]]
+            ticket_data[New_Analysis_columnName] = ticket_data[Analysis_primary_columnNames[0]].copy()
 #            ticket_data.drop(columns=[Analysis_primary_columnNames[0]])
             Analysis_primary_columnNames.remove(Analysis_primary_columnNames[0])
             for item in Analysis_primary_columnNames:
@@ -201,10 +202,7 @@ class mclass:
                         testing_corpus.append(cleaned)
                         testing_ticket_numbers.append(row[Analysis_ticket_columnName])   
                     All_ticket_numbers.append(row[Analysis_ticket_columnName])
-            
-            label_encoder = LabelEncoder()
-            integer_encoded = label_encoder.fit_transform(training_output_category)
-            
+                        
             
             # IF NO EXISTING MANUAL TAG AVAILABLE, PERFORM UNSUPERVISED LEARNING
             if Analysis_Result_columnName is None:         
@@ -231,19 +229,11 @@ class mclass:
     
                 # do prediction only if testing data is available
                 if len(testing_corpus) > 0:
-                    predicted_labels = self.RunTrainingModels(training_corpus, integer_encoded, testing_corpus, label_encoder)
+                    predicted_labels = self.RunTrainingModels(training_corpus, training_output_category, testing_corpus)
                                         
-    #                transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words='spanish')
-    #                transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
-    #                tfidf = transformer.fit_transform(training_corpus)
-#                    modelknn = KNeighborsClassifier(n_neighbors=25)
-#                    modelknn.fit(tfidf, integer_encoded)
-#                    testing_tfidf = transformer.transform(testing_corpus)
-#                    
-#                    predicted_labels_knn = modelknn.predict(testing_tfidf )
-#                    
-                    classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Tag':label_encoder.inverse_transform(predicted_labels)} #Creating dict having doc with the corresponding cluster number.
+                    classification_dic={'Issue': testing_description, 'Transformed Data' : testing_corpus, 'Machine Tag':predicted_labels} #Creating dict having doc with the corresponding cluster number.
                     predicted_frame=pd.DataFrame(classification_dic, index=[testing_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Tag']) # Converting it into a dataframe.                    
+                    
                     excel_frame = pd.concat([excel_frame, predicted_frame], sort=False)
                     
 
@@ -268,7 +258,7 @@ class mclass:
 
         
         #Count Vectoriser then tidf transformer
-        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words=stopwords.words("spanish"))
+        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words=stopwords.words("english"))
 #        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
         tfidf = transformer.fit_transform(training_corpus)
 
@@ -428,32 +418,39 @@ class mclass:
         exportbutton.pack()
 
 #%%
-    def RunTrainingModels(self, training_corpus, integer_encoded, testing_corpus, label_encoder):
+    def RunTrainingModels(self, training_corpus, training_output_category, testing_corpus):
+
+        label_encoder = LabelEncoder()
+        training_label_encoded = label_encoder.fit_transform(training_output_category)
 
         # split the dataset into training and validation datasets 
-        train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, integer_encoded)
+        train_x, valid_x, train_y, valid_y = model_selection.train_test_split(training_corpus, training_label_encoded)
 
         def train_model(classifier, feature_vector_train, label, feature_vector_valid, is_neural_net=False):
             if is_neural_net:
                 # fit the training dataset on the classifier
-                classifier.fit(feature_vector_train, label, batch_size = 1000, epochs=5, validation_split=0.05)
+                classifier.fit(feature_vector_train, label, batch_size = 1000, epochs=10, validation_split=0.01)
+
                 # predict the labels on validation dataset
-                predictions = classifier.predict(feature_vector_valid)
-                print ("prediction", predictions)
-                predictions = predictions.argmax(axis=-1)
+                if feature_vector_valid is None:
+                    return (-1, classifier)
+                else:
+                    predictions = classifier.predict(feature_vector_valid)
+                    predictions = predictions.argmax(axis=-1)
+                    print ("prediction", predictions)
+
             else:
                 # fit the training dataset on the classifier
                 classifier.fit(feature_vector_train, label)
                 # predict the labels on validation dataset
                 predictions = classifier.predict(feature_vector_valid)
-                
+            
             return int(metrics.accuracy_score(predictions, valid_y) *100), classifier
+
 
         accuracy_list = []
         algorithm_list = []
         classifer_list = []
-
-        '''
 
         # word level tf-idf        
         transformer_new = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', max_features=50000)
@@ -473,6 +470,7 @@ class mclass:
         xtrain_tfidf_ngram_chars =  tfidf_vect_ngram_chars.transform(train_x) 
         xvalid_tfidf_ngram_chars =  tfidf_vect_ngram_chars.transform(valid_x)
   
+#        '''
         accuracy, classifier = train_model(KNeighborsClassifier(n_neighbors=25), xtrain_tfidf, train_y, xvalid_tfidf)
         accuracy_list.append(accuracy)
         algorithm_list.append("KNN WL TF-IDF")
@@ -496,7 +494,7 @@ class mclass:
         accuracy_list.append(accuracy)
         algorithm_list.append("SVM WL TF-IDF")
         classifer_list.append(classifier)
-        '''
+#        '''
         
         '''
         # Naive Bayes on Word Level TF IDF Vectors
@@ -531,16 +529,16 @@ class mclass:
         '''
         
 #        '''
-        encoded_y = label_encoder.fit_transform(train_y)
-        print (encoded_y.shape)
-        print (train_y.shape)
-        print (max(encoded_y))
+        
+        # Reset the training and validation. For neural net, we need more data and will use inbuilt validation in keras
+#        train_x, train_y, valid_seq_x, valid_y,  = training_corpus, training_label_encoded, None, None
 
-        # load the pre-trained word-embedding vectors 
-        embeddings_index = {}
-        for i, line in enumerate(open('glove.6B/glove.6B.300d.txt', encoding="utf8")):
-            values = line.split()
-            embeddings_index[values[0]] = np.asarray(values[1:], dtype='float32')
+        # load the pre-trained word-embedding vectors
+        if self.embeddings_index is None:
+            self.embeddings_index = {}
+            for i, line in enumerate(open('glove.6B/glove.6B.300d.txt', encoding="utf8")):
+                values = line.split()
+                self.embeddings_index[values[0]] = np.asarray(values[1:], dtype='float32')
 
         # create a tokenizer 
         token = text.Tokenizer()
@@ -551,15 +549,12 @@ class mclass:
         train_seq_x = sequence.pad_sequences(token.texts_to_sequences(train_x), maxlen=70)
         valid_seq_x = sequence.pad_sequences(token.texts_to_sequences(valid_x), maxlen=70)
         
-
         # create token-embedding mapping
         embedding_matrix = np.zeros((len(word_index) + 1, 300))
         for word, i in word_index.items():
-            embedding_vector = embeddings_index.get(word)
+            embedding_vector = self.embeddings_index.get(word)
             if embedding_vector is not None:
                 embedding_matrix[i] = embedding_vector
-
-        
         
         def create_rcnn():
             # Add an Input Layer
@@ -581,11 +576,11 @@ class mclass:
             # Add the output Layers
             output_layer1 = layers.Dense(50, activation="relu")(pooling_layer)
             output_layer1 = layers.Dropout(0.25)(output_layer1)
-            output_layer2 = layers.Dense(units=max(encoded_y) + 1, activation="softmax", name="ouput_layer")(output_layer1)
+            output_layer2 = layers.Dense(units=max(training_label_encoded) + 1, activation="softmax", name="ouput_layer")(output_layer1)
         
             # Compile the model
             model = models.Model(inputs=input_layer, outputs=output_layer2)
-            model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy', metrics=["accuracy"])
+            model.compile(optimizer=optimizers.Adam(), loss='sparse_categorical_crossentropy', metrics=["sparse_categorical_accuracy"])
             
             return model
         
@@ -612,10 +607,10 @@ class mclass:
 
         selected_algorithm = None
         selected_algorithm_Name = None
-        selected_accuracy = 0
+        selected_accuracy = -1
         for algorithm_name, algorithm, accuracy in zip(algorithm_list, classifer_list, accuracy_list):
             print ("Algorithm -> " , algorithm_name , " ||| Accuracy -> " , int(accuracy) , "%\n")
-            if (selected_accuracy < accuracy):
+            if (selected_accuracy <= accuracy):
                 selected_algorithm = algorithm
                 selected_algorithm_Name = algorithm_name
                 selected_accuracy = accuracy
@@ -624,24 +619,34 @@ class mclass:
 
         # decide the transformer based on algorithm
         if "WL TF-IDF" in selected_algorithm_Name:
-            testing_tfidf = transformer_new.transform(testing_corpus)
+            testing_data = transformer_new.transform(testing_corpus)
         elif "N-Gram" in selected_algorithm_Name:
-           testing_tfidf = tfidf_vect_ngram.transform(testing_corpus)
+           testing_data = tfidf_vect_ngram.transform(testing_corpus)
         elif "CL" in selected_algorithm_Name:
-            testing_tfidf = tfidf_vect_ngram_chars.transform(testing_corpus)
+            testing_data = tfidf_vect_ngram_chars.transform(testing_corpus)
         elif "Deep" in selected_algorithm_Name:
-           testing_tfidf = sequence.pad_sequences(token.texts_to_sequences(testing_corpus), maxlen=70)
-            
-        predicted_labels = selected_algorithm.predict(testing_tfidf)
+           testing_data = sequence.pad_sequences(token.texts_to_sequences(testing_corpus), maxlen=70)
         
+#        print (testing_data)
+        predicted_labels = selected_algorithm.predict(testing_data)
+        
+#        print (predicted_labels)
         # do a reverse transformation for deep learning outputs
-        predicted_labels = predicted_labels.argmax(axis=-1) if "Deep" in selected_algorithm_Name else predicted_labels
+        predicted_labels = label_encoder.inverse_transform(predicted_labels.argmax(axis=-1)) if "Deep" in selected_algorithm_Name else label_encoder.inverse_transform(predicted_labels)
+        
         print (predicted_labels)
 
 #        '''      
         return predicted_labels
 
 #%%
+from tqdm import tqdm
 window= Tk()
-start= mclass (window)
+# load the pre-trained word-embedding vectors 
+embeddings_index = {}
+for i, line in tqdm(enumerate(open('glove.6B/glove.6B.300d.txt', encoding="utf8"))):
+    values = line.split()
+    embeddings_index[values[0]] = np.asarray(values[1:], dtype='float32')
+
+start= mclass (window, embeddings_index)
 window.mainloop()
