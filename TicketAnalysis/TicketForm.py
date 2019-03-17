@@ -41,6 +41,15 @@ class mclass:
     def __init__(self,  window, embeddings_index):
         self.window = window
         self.embeddings_index = embeddings_index
+
+        self.stop = set(stopwords.words('english'))
+        
+        # custom words to ignore
+        custom_stop_words = ['tracke option', 'track options', 'service xcall', 'work note', 'service option']
+        for word in custom_stop_words:
+            self.stop.add(word)    
+        print (self.stop)
+        self.output_file = "TicketAnalytics_Results.xlsx"
         
         window.title("AI Ops Suite")
 
@@ -128,27 +137,31 @@ class mclass:
             targetlabel.grid(row=4, column=2)
             self.target_column_list .grid(row=5, column=2)
     
-            button = Button (window, text="Analyze Tickets", command=self.AnalyzeTickets)
+            button = Button (self.window, text="Analyze Tickets", command=self.AnalyzeTickets)
             button.grid(row=6, column=1)
+            
+#            fb = ttk.Frame()
+            pb = ttk.Progressbar(self.window, orient ="horizontal",length = 200, mode ="indeterminate")
+            pb.grid(row=7, column=0, columnspan = 3)
+#            pb.pack(expand=True, fill=Tkinter.BOTH, side=Tkinter.TOP)
+            pb.start(50)
         except Exception as e:
             messagebox.showerror("Read Error", str(e))                
 #%%
     def AnalyzeTickets(self):
         try:
-            input_file = "Mytest"
             
             items = self.source_column_list.curselection()
             Analysis_primary_columnNames = [self.source_column_dic[int(item)] for item in items]
             Analysis_Result_columnName = None if self.target_column_list.curselection()[0] == 0 else self.target_column_list.get(ACTIVE)
             Analysis_ticket_columnName  = self.ticket_column_list.get(ACTIVE)
     
-            stop = set(stopwords.words('english'))
             exclude = set(string.punctuation)
             lemma = WordNetLemmatizer()
             
             # Cleaning the text sentences so that punctuation marks, stop words & digits are removed
             def clean(doc):
-                stop_free = " ".join([i for i in doc.lower().split() if i not in stop])
+                stop_free = " ".join([i for i in doc.lower().split() if i not in self.stop])
                 punc_free = ''.join(ch for ch in stop_free if ch not in exclude)
                 normalized = " ".join(lemma.lemmatize(word) for word in punc_free.split())
                 processed = re.sub(r"\d+","",normalized)
@@ -220,7 +233,7 @@ class mclass:
                 excel_frame=pd.DataFrame(classification_dic, index=[training_ticket_numbers], columns=['Issue', 'Transformed Data', 'Machine Cluster', 'Machine Tag'])        
     
                 # Show your results in pop-up, a pareto chart and a summary of clusters
-                self.PlotResults(plot_frame, excel_frame, input_file)
+                self.PlotResults(plot_frame, excel_frame)
             else:
                 
                 classification_dic={'Issue': training_description, 'Transformed Data':training_corpus, 'Human Tag': training_output_category, 'Machine Tag': training_output_category} #Creating dict having doc with the corresponding cluster number.
@@ -241,23 +254,23 @@ class mclass:
                     plot_frame["Cluster"] = plot_frame.index
                     plot_frame["Machine Tag"] = plot_frame.index
                     
-                    self.PlotResults(plot_frame, excel_frame, input_file)
+                    self.PlotResults(plot_frame, excel_frame)
                     
         except Exception as e:
             messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
 
 #%%
-    def ExportData(self, excel_frame, input_file):
+    def ExportData(self, excel_frame):
         # save to file
-        excel_frame.to_excel(input_file + "_Clusters.xlsx")
-        messagebox.showinfo("Success", "Automated Machine Clustering generated and written to " + input_file + "_Clusters.xlsx")
+        excel_frame.to_excel(self.output_file)
+        messagebox.showinfo("Success", "Automated Machine Clustering generated and written to " + self.output_file)
 
 #%%
     def PerformClustering(self, training_corpus):        
 
         
         #Count Vectoriser then tidf transformer
-        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words=stopwords.words("english"))
+        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words=self.stop)
 #        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
         tfidf = transformer.fit_transform(training_corpus)
 
@@ -360,7 +373,7 @@ class mclass:
 
         return plot_frame, cluster_themes_dict
     #%%
-    def PlotResults (self, plot_frame, excel_frame, input_file):
+    def PlotResults (self, plot_frame, excel_frame):
         
         popup_window = Toplevel(self.window)
 
@@ -409,11 +422,11 @@ class mclass:
                         tree.insert(id2, "end", excelindex, text=excelindex, values=(excelrow['Transformed Data'],excelrow['Issue']))
 
             i+= 1
+
+        exportbutton = Button(popup_window, text="Export the Results", command=lambda : self.ExportData(excel_frame))
             
         canvas.get_tk_widget().pack()
         tree.pack()
-
-        exportbutton = Button(popup_window, text="Export the Results", command=self.ExportData(excel_frame, input_file))
         exportbutton.pack()
 
 #%%
@@ -436,8 +449,6 @@ class mclass:
                 else:
                     predictions = classifier.predict(feature_vector_valid)
                     predictions = predictions.argmax(axis=-1)
-                    print ("prediction", predictions)
-
             else:
                 # fit the training dataset on the classifier
                 classifier.fit(feature_vector_train, label)
@@ -495,7 +506,7 @@ class mclass:
         classifer_list.append(classifier)
 #        '''
         
-        '''
+#        '''
         # Naive Bayes on Word Level TF IDF Vectors
         accuracy, classifier  = train_model(naive_bayes.MultinomialNB(), xtrain_tfidf, train_y, xvalid_tfidf)
         accuracy_list.append(accuracy)
@@ -514,6 +525,7 @@ class mclass:
         algorithm_list.append("RF WL TF-IDF")
         classifer_list.append(classifier)
 
+        '''
         # Extereme Gradient Boosting on Word Level TF IDF Vectors
         accuracy, classifier   = train_model(xgboost.XGBClassifier(), xtrain_tfidf.tocsc(), train_y, xvalid_tfidf.tocsc())
         accuracy_list.append(accuracy)
