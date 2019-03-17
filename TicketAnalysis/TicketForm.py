@@ -656,4 +656,4 @@ for i, line in tqdm(enumerate(open('glove.6B/glove.6B.300d.txt', encoding="utf8"
     embeddings_index[values[0]] = np.asarray(values[1:], dtype='float32')
 
 start= mclass (window, embeddings_index)
-window.mainloop()
+window.mainloop() 
