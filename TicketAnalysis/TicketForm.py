@@ -42,13 +42,12 @@ class mclass:
         self.window = window
         self.embeddings_index = embeddings_index
 
-        self.stop = set(stopwords.words('english'))
+        self.stop = set(stopwords.words('spanish'))
         
         # custom words to ignore
         custom_stop_words = ['tracke option', 'track options', 'service xcall', 'work note', 'service option']
         for word in custom_stop_words:
             self.stop.add(word)    
-        print (self.stop)
         self.output_file = "TicketAnalytics_Results.xlsx"
         
         window.title("AI Ops Suite")
@@ -102,7 +101,7 @@ class mclass:
         try:
             self.excel_data=pd.read_excel(self.fileName.get(), sheet_name=self.sheetName.get())
                 
-            column_data = self.excel_data.iloc[0:0,0:30] #Selecting the column that has text.
+            column_data = self.excel_data.iloc[0:0,0:150] #Selecting the column that has text.
     
             ticketlabel = Label( window, text="STEP 1: \n Select the column which has unique identifier \n (ex: ticket number)" )
             sourcelabel = Label( window, text="STEP 2: \n Select the ticket data \n to analyze\n(Multiple fields can be selected)" )
@@ -178,7 +177,7 @@ class mclass:
             testing_ticket_numbers=[]
             training_output_category=[]
     
-            ticket_data = self.excel_data.iloc[:,0:30] #Selecting the column that has text.
+            ticket_data = self.excel_data.iloc[:,0:150] #Selecting the column that has text.
     
     
             # Trying to add a new column which will hold all the selected columns
@@ -596,6 +595,7 @@ class mclass:
             return model
         
         classifier = create_rcnn()
+        print (classifier.summary())
         accuracy, _ = train_model(classifier, train_seq_x, train_y, valid_seq_x, is_neural_net=True)
         accuracy_list.append(accuracy)
         algorithm_list.append("Deep - RCNN")
