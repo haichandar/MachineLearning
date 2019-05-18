@@ -182,9 +182,9 @@ class nn_utilities:
                 'pneumothorax_train':'https://www.dropbox.com/s/pnwf67qzztd1slc/pneumothorax_train.h5?dl=1'}
         
         data_dir =  os.path.abspath(self.data_path + 'Image\Lung_Data\\')
-        
+
         for (name,url) in urls.items():
-            if not os.path.isfile(data_dir+name+'.h5'):
+            if not os.path.isfile(data_dir+"/"+name+'.h5'):
                 print('Downloading '+name+'...')
                 u = urlopen(url)
                 data = u.read()
@@ -197,8 +197,8 @@ class nn_utilities:
         print('Files have been downloaded.')
         print("Loading X-Ray Dataset!")
 
-        train = h5py.File(data_dir+'pneumothorax_train.h5','r')
-        validation = h5py.File(data_dir+'pneumothorax_test.h5','r')
+        train = h5py.File(data_dir+'/pneumothorax_train.h5','r')
+        validation = h5py.File(data_dir+'/pneumothorax_test.h5','r')
 
         x_train = train['image'][:]
         x_validation = validation['image'][:500]

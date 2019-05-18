@@ -1,6 +1,7 @@
-/_pychache/*
+/__pycache__/*
 /images/*
 /*.gif
 /*.jpg
 /*.tif
 /*.jpeg
+/TestImages/*

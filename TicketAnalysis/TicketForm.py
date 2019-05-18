@@ -42,10 +42,10 @@ class mclass:
         self.window = window
         self.embeddings_index = embeddings_index
 
-        self.stop = set(stopwords.words('spanish'))
+        self.stop = set(stopwords.words('english'))
         
         # custom words to ignore
-        custom_stop_words = ['tracke option', 'track options', 'service xcall', 'work note', 'service option']
+        custom_stop_words = ['tracke option', 'track options', 'service xcall', 'work note', 'service option', 'osel', 'phontusa']
         for word in custom_stop_words:
             self.stop.add(word)    
         self.output_file = "TicketAnalytics_Results.xlsx"
@@ -59,7 +59,7 @@ class mclass:
         panel.image = img
         panel.grid(row=0, column=0)
 
-        self.Header= Label( window, text="AI Ops - Ticket Analytics", justify="center" )
+        self.Header= Label( window, text="Ticket Analytics", justify="center" )
         self.Header.config(fg="teal", font=("Helvetica", 30))
         self.Header.grid(row=0, column=1)
 
@@ -148,7 +148,7 @@ class mclass:
             messagebox.showerror("Read Error", str(e))                
 #%%
     def AnalyzeTickets(self):
-        try:
+#        try:
             
             items = self.source_column_list.curselection()
             Analysis_primary_columnNames = [self.source_column_dic[int(item)] for item in items]
@@ -170,6 +170,7 @@ class mclass:
             #Converting the column of data from excel sheet into a list of documents, where each document corresponds to a group of words.
             All_ticket_numbers=[]
             training_corpus=[]
+            training_corpus_listformat=[]
             training_description=[]
             testing_corpus=[]
             testing_description=[]
@@ -197,13 +198,14 @@ class mclass:
                     line = str(row[New_Analysis_columnName])
     
                     line = line.strip()
-                    cleaned = clean(line)
-                    cleaned = ' '.join(cleaned)
+                    cleaned_split = clean(line)
+                    cleaned = ' '.join(cleaned_split)
             
                     ''' IF MANUAL CLASSFICATION IS AVAILABLE, PUT THEM INTO TRAINING, ELSE TESTING'''
                     if (Analysis_Result_columnName is None or str(row[Analysis_Result_columnName]) != 'nan'):
                         training_description.append(line)
                         training_corpus.append(cleaned)
+                        training_corpus_listformat.append(cleaned_split)
                         # Add ticket number for indexing
                         training_ticket_numbers.append(row[Analysis_ticket_columnName])   
                         if not Analysis_Result_columnName is None:
@@ -219,8 +221,8 @@ class mclass:
             if Analysis_Result_columnName is None:         
     
                 # Perform unsupervised clustering and get cluster resullts
-                cluster_labels, clusters = self.PerformClustering(training_corpus);
-
+                cluster_labels, clusters = self.PerformClustering(training_corpus_listformat)
+                
                 # Analyze the clustering and come up with tagging to plot and generate excel
                 plot_frame, cluster_themes_dict = self.AnalyzeClustering(clusters, cluster_labels, training_corpus)
     
@@ -255,8 +257,8 @@ class mclass:
                     
                     self.PlotResults(plot_frame, excel_frame)
                     
-        except Exception as e:
-            messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
+#        except Exception as e:
+#            messagebox.showerror("Processing Error", "An unexpected error occurred. Please check if you have selected all 3 input data \n Error: " + str(e))                
 
 #%%
     def ExportData(self, excel_frame):
@@ -267,7 +269,69 @@ class mclass:
 #%%
     def PerformClustering(self, training_corpus):        
 
+        '''        
+        # create a tokenizer 
+        token = text.Tokenizer()
+        token.fit_on_texts(training_corpus)
+        word_index = token.word_index
         
+        # create token-embedding mapping
+        embedding_matrix = np.zeros((len(word_index) + 1, 50))
+        for word, i in word_index.items():
+            embedding_vector = self.embeddings_index.get(word)
+            if embedding_vector is not None:
+                embedding_matrix[i] = embedding_vector
+        '''
+        
+        from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+        
+        # Train the doc to Vector model using training corpus
+        Vector_dimensions  = 300
+        documents = [TaggedDocument(doc, [i]) for i, doc in enumerate(training_corpus)]
+#        model = Doc2Vec(documents, vector_size=Vector_dimensions, window=2, min_count=1, workers=4)
+        model = Doc2Vec(size=Vector_dimensions, dbow_words= 1, dm=0, iter=1,  window=5, seed=1337, min_count=5, workers=4,alpha=0.025, min_alpha=0.025)
+        model.build_vocab(documents)
+        doc_count = len(training_corpus)
+        for epoch in range(10):
+            print("epoch "+str(epoch))
+            model.train(documents, total_examples=doc_count, epochs=1)
+            model.alpha -= 0.002  # decrease the learning rate
+            model.min_alpha = model.alpha  # fix the learning rate, no decay
+
+        #inference hyper-parameters
+        start_alpha=0.01
+        infer_epoch=50
+
+        # Generate the embedding vector using the trained model
+        embedding_matrix = np.zeros((doc_count, Vector_dimensions))
+        i = 0
+        for current_doc in training_corpus:
+            embedding_matrix[i] = model.infer_vector(current_doc, alpha=start_alpha, steps=infer_epoch)
+            i += 1
+
+        # Use the doc2Vec data to do unsupervised clustering
+        k_optimal = 30
+        print ("clusters chosen "+ str(k_optimal))
+        
+        # FIRST DO UNSUPERVISED CLUSTERING ON TEXT USING KMeans - Cosine distance instead of euclidian distance
+        from nltk.cluster import KMeansClusterer
+        import nltk
+        kclusterer = KMeansClusterer(k_optimal, distance=nltk.cluster.util.cosine_distance, repeats=25, avoid_empty_clusters=True)
+        clusters = kclusterer.cluster(embedding_matrix, assign_clusters=True)
+        cluster_labels = np.asarray(clusters)
+        
+        '''        
+        modelkmeans = KMeans(n_clusters=k_optimal, init='k-means++', precompute_distances=True)
+        modelkmeans.fit(embedding_matrix)
+        cluster_labels = modelkmeans.labels_
+        clusters = cluster_labels.tolist()
+        '''
+        
+        svd = TruncatedSVD(n_components=2, n_iter=7, random_state=42)
+        svd.fit(embedding_matrix)
+        svd_2d = svd.transform(embedding_matrix)
+
+        '''
         #Count Vectoriser then tidf transformer
         transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', stop_words=self.stop)
 #        transformer = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(2,3), max_features=5000)
@@ -276,7 +340,7 @@ class mclass:
         Sum_of_squared_distances = []
         k_step = 1
         k_start = 1
-        k_max = 20
+        k_max = 30
         K = range(k_start, k_max + 1, k_step)
         for k in K:
             km = KMeans(n_clusters=k)
@@ -284,17 +348,6 @@ class mclass:
             Sum_of_squared_distances.append(km.inertia_)
         
         k_optimal = k_start + Sum_of_squared_distances.index(min(Sum_of_squared_distances)) * k_step
-                
-#        fig = Figure(figsize=(6,4))
-#        plt = fig.add_subplot(111)
-#        plt.plot(K, Sum_of_squared_distances, 'bx-')
-#        plt.set_title ("Elbow Method For Optimal cluster #", fontsize=12)
-#        plt.set_ylabel("Sum_of_squared_distances", fontsize=7)
-#        plt.set_xlabel("k", fontsize=7)
-#
-#        canvas = FigureCanvasTkAgg(fig, master=self.window)
-#        canvas.get_tk_widget().grid(row=7, column=0)
-#        canvas.draw()
 
         print ("clusters chosen "+ str(k_optimal))
         # FIRST DO UNSUPERVISED CLUSTERING ON TEXT USING KMeans
@@ -306,6 +359,20 @@ class mclass:
         svd = TruncatedSVD(n_components=2, n_iter=7, random_state=42)
         svd.fit(tfidf)
         svd_2d = svd.transform(tfidf)
+
+        '''                
+        
+#        fig = Figure(figsize=(6,4))
+#        plt = fig.add_subplot(111)
+#        plt.plot(K, Sum_of_squared_distances, 'bx-')
+#        plt.set_title ("Elbow Method For Optimal cluster #", fontsize=12)
+#        plt.set_ylabel("Sum_of_squared_distances", fontsize=7)
+#        plt.set_xlabel("k", fontsize=7)
+#
+#        canvas = FigureCanvasTkAgg(fig, master=self.window)
+#        canvas.get_tk_widget().grid(row=7, column=0)
+#        canvas.draw()
+
         
         rc('figure', figsize=(15, 4))
         fig2 = pl.figure('K-means with ' + str(k_optimal) + ' clusters',)
@@ -328,10 +395,11 @@ class mclass:
         cluster_count_list = []
         cluster_tag_list = []
         cluster_themes_dict = {}
-        for i in set(clusters):    
+        
+        for i in set(clusters):
             cluster_count_list.append(clusters.count(i))
-            current_cluster_data = [training_corpus[x] for x in np.where(cluster_labels == i)[0]]        
-
+            current_cluster_data = [training_corpus[x] for x in np.where(cluster_labels == i)[0]]
+                        
             try:
                 # USE WORD GRAM FOR FINDING SIGNIFICANT TERM
                 xvalid_tfidf_ngram = TfidfVectorizer(analyzer='word', token_pattern=r'\w{1,}', ngram_range=(4,5), max_features=5000)
@@ -343,7 +411,7 @@ class mclass:
                 
             try:
                 
-                components = 3 if xvalid_tfidf.shape[0] > 3 else xvalid_tfidf.shape[0]
+                components = 5 if xvalid_tfidf.shape[0] > 5 else xvalid_tfidf.shape[0]
                 NMF_model = decomposition.NMF(n_components=components, 
                                 random_state=1,
                                 beta_loss='kullback-leibler',
@@ -651,9 +719,9 @@ from tqdm import tqdm
 window= Tk()
 # load the pre-trained word-embedding vectors 
 embeddings_index = {}
-for i, line in tqdm(enumerate(open('glove.6B/glove.6B.300d.txt', encoding="utf8"))):
-    values = line.split()
-    embeddings_index[values[0]] = np.asarray(values[1:], dtype='float32')
+#for i, line in tqdm(enumerate(open('glove.6B/glove.6B.50d.txt', encoding="utf8"))):
+#    values = line.split()
+#    embeddings_index[values[0]] = np.asarray(values[1:], dtype='float32')
 
 start= mclass (window, embeddings_index)
 window.mainloop() 

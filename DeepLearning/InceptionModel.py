@@ -6,10 +6,6 @@ Created on Sat Mar 23 22:07:07 2019
 """
 
 import keras
-#from keras.layers.core import Layer
-#import keras.backend as K
-#import tensorflow as tf
-from keras.datasets import cifar10
 
 from keras.models import Model
 from keras.layers import Conv2D, MaxPool2D,  \
@@ -17,53 +13,53 @@ from keras.layers import Conv2D, MaxPool2D,  \
     GlobalAveragePooling2D, AveragePooling2D,\
     Flatten
 
-import cv2 
-import numpy as np 
-from keras.utils import np_utils
-
+#from keras import backend as K 
 import math 
 from keras.optimizers import SGD 
-from keras.callbacks import LearningRateScheduler
+from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 
 from nn_utilities_py import nn_utilities
 import os
+from keras.preprocessing.image import ImageDataGenerator
 
-num_classes = 10
 
-def load_cifar10_data(img_rows, img_cols):
-
-    # Load cifar10 training and validation sets
-    (X_train, Y_train), (X_valid, Y_valid) = cifar10.load_data()
-
-    # Resize training images
-    X_train = np.array([cv2.resize(img, (img_rows,img_cols)) for img in X_train[:,:,:,:]])
-    X_valid = np.array([cv2.resize(img, (img_rows,img_cols)) for img in X_valid[:,:,:,:]])
-
-    # Transform targets to keras compatible format
-    Y_train = np_utils.to_categorical(Y_train, num_classes)
-    Y_valid = np_utils.to_categorical(Y_valid, num_classes)
-    
-    X_train = X_train.astype('float32')
-    X_valid = X_valid.astype('float32')
-
-    # preprocess data
-    X_train = X_train / 255.0
-    X_valid = X_valid / 255.0
-
-    return X_train, Y_train, X_valid, Y_valid
-
-#X_train, y_train, X_test, y_test = load_cifar10_data(224, 224)
-
-data_path =  os.path.abspath('E:\MLData\\')
+''' DATA INPUT '''
+#data_path =  os.path.abspath('E:\MLData\\')
+data_path =  ''
 nn_utilities_obj = nn_utilities(data_path)
-input_data = nn_utilities_obj.load_mnist_digit_data()
-X_train_2D, y_train, X_test_2D, y_test = input_data["x_train"], input_data["y_train"], input_data["x_validation"], input_data["y_validation"]
+#input_data = nn_utilities_obj.load_mnist_digit_data()
+#input_data = nn_utilities_obj.load_emnist_alphadigit_data()
+#input_data = nn_utilities_obj.load_PneumothoraxDataset()
+input_data = nn_utilities_obj.load_emnist_alphadigit_data_google_collab()
+
+X_train_2D, y_train, X_test_2D, y_test = input_data["x_train"][20000:], input_data["y_train"][20000:], input_data["x_validation"], input_data["y_validation"]
+
+num_classes = input_data["y_train"].shape[1]
 
 image_size = 28
 num_of_color_channels = 1
 
 X_train = X_train_2D.reshape(X_train_2D.shape[0], image_size, image_size, num_of_color_channels)
 X_test = X_test_2D.reshape(X_test_2D.shape[0], image_size, image_size, num_of_color_channels)
+
+generator = ImageDataGenerator(featurewise_center=True, 
+                               featurewise_std_normalization=True,
+                               rotation_range=15,
+                               width_shift_range=0.2,
+                               height_shift_range=0.2,
+                               shear_range=0.2,
+                               zoom_range=0.2,
+                               horizontal_flip=True,
+                               fill_mode='nearest')
+
+generator.fit(X_train)
+def generator_multiple_data(X, y, batch_size):
+    genX = generator.flow(X, y,  batch_size=batch_size, seed=1)
+    while True:
+        X_NEW = genX.next()
+        yield X_NEW[0], [X_NEW[1], X_NEW[1], X_NEW[1]]
+        
+''' DATA INPUT ENDS'''
 
 
 def inception_module(x,
@@ -94,7 +90,6 @@ kernel_init = keras.initializers.glorot_uniform()
 bias_init = keras.initializers.Constant(value=0.2)
 
 input_layer = Input(shape=(image_size, image_size, num_of_color_channels))
-#input_layer = Input(shape=(28, 28, 3))
 
 x = Conv2D(64, (7, 7), padding='same', strides=(2, 2), activation='relu', name='conv_1_7x7/2', kernel_initializer=kernel_init, bias_initializer=bias_init)(input_layer)
 x = MaxPool2D((3, 3), padding='same', strides=(2, 2), name='max_pool_1_3x3/2')(x)
@@ -138,7 +133,7 @@ x1 = Conv2D(128, (1, 1), padding='same', activation='relu')(x1)
 x1 = Flatten()(x1)
 x1 = Dense(1024, activation='relu')(x1)
 x1 = Dropout(0.7)(x1)
-x1 = Dense(10, activation='softmax', name='auxilliary_output_1')(x1)
+x1 = Dense(num_classes, activation='softmax', name='auxilliary_output_1')(x1)
 
 x = inception_module(x,
                      filters_1x1=160,
@@ -174,7 +169,7 @@ x2 = Conv2D(128, (1, 1), padding='same', activation='relu')(x2)
 x2 = Flatten()(x2)
 x2 = Dense(1024, activation='relu')(x2)
 x2 = Dropout(0.7)(x2)
-x2 = Dense(10, activation='softmax', name='auxilliary_output_2')(x2)
+x2 = Dense(num_classes, activation='softmax', name='auxilliary_output_2')(x2)
 
 x = inception_module(x,
                      filters_1x1=256,
@@ -209,14 +204,14 @@ x = GlobalAveragePooling2D(name='avg_pool_5_3x3/1')(x)
 
 x = Dropout(0.4)(x)
 
-x = Dense(10, activation='softmax', name='output')(x)
+x = Dense(num_classes, activation='softmax', name='output')(x)
 
 
 model = Model(input_layer, [x, x1, x2], name='inception_v1')
 
 model.summary()
 
-epochs = 25
+epochs = 1
 initial_lrate = 0.01
 
 def decay(epoch, steps=100):
@@ -230,8 +225,36 @@ sgd = SGD(lr=initial_lrate, momentum=0.9, nesterov=False)
 
 lr_sc = LearningRateScheduler(decay, verbose=1)
 
+'''
+# load weights into new model
+model.load_weights(data_path + "inception_model.h5")
+print("Loaded model from disk")
+'''
+
 model.compile(loss=['categorical_crossentropy', 'categorical_crossentropy', 'categorical_crossentropy'], loss_weights=[1, 0.3, 0.3], optimizer=sgd, metrics=['accuracy'])
 
+# serialize model to JSON
+model_json = model.to_json()
+with open("inception_model.json", "w") as json_file:
+    json_file.write(model_json)
 
-history = model.fit(X_train, [y_train, y_train, y_train], validation_data=(X_test, [y_test, y_test, y_test]), epochs=epochs, batch_size=256, callbacks=[lr_sc])
+
+# checkpoint
+filepath="weights-improvement-{epoch:02d}-{val_acc:.2f}.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+callbacks_list = [checkpoint]
+
+#history = model.fit(X_train, [y_train, y_train, y_train], validation_data=(X_test, [y_test, y_test, y_test]), epochs=epochs, batch_size=100, callbacks=[lr_sc])
+
+hist = model.fit_generator(generator_multiple_data(X_train, y_train, 100),
+                steps_per_epoch=len(X_train), epochs=epochs,
+                callbacks = [lr_sc],
+                validation_data=(X_test, [y_test, y_test, y_test]),
+                validation_steps=X_test.shape[0], 
+                verbose=1)    
+    
+# serialize weights to HDF5
+model.save_weights("inception_model.h5")
+print("Saved model to disk")
+
 

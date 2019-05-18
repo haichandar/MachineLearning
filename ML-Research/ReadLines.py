@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from PIL import Image, ImageOps
+from scipy.ndimage import zoom
 import copy 
 
 class ReadLines:
@@ -140,7 +141,7 @@ class ReadLines:
         ''' Hyper Parameters'''
         h_step = 3
         #Line_count_merge_threshold = 7
-        Line_count_merge_threshold = 3
+        Line_count_merge_threshold = 0
         ## what should be the minimum distance between 2 lines which 
         #minimum_distance_threshold_default = 20 
         minimum_distance_threshold_default = 20
@@ -169,13 +170,14 @@ class ReadLines:
                     new_y1 = 1
                     new_y2 = img_org.shape[0]
                     lines_merged += 1
-            
+
             # This confirms merging happened
             if (new_y1 > 0):
+#                print (length, lines_merged) if lines_merged > Line_count_merge_threshold else None
                 length_array.append(int(length/lines_merged))
                 new_coord.append([new_x, new_y1, new_x, new_y2, lines_merged, int(length/lines_merged)]) if lines_merged > Line_count_merge_threshold else None
 #                new_coord.append([new_x, new_y1, new_x, new_y2, lines_merged, int(length/lines_merged)])
-                
+
         # Find minimun outlier based on Interquartile Range and Outliers model
         q75, q25 = np.percentile(length_array, [75 ,25])
         minimum_length_threshold = q25 - (q75 - q25) * 1.5
@@ -196,11 +198,16 @@ class ReadLines:
         
         
         # Find minimun outlier based on Interquartile Range and Outliers model
-        q75, q25 = np.percentile(distance_array, [75 ,25])
-        minimum_distance_threshold = q25 - (q75 - q25) * 1.5
-        minimum_distance_threshold =  minimum_distance_threshold_default if  minimum_distance_threshold < 0 else  minimum_distance_threshold
+        try:
+            q75, q25 = np.percentile(distance_array, [75 ,25])
+            minimum_distance_threshold = q25 - (q75 - q25) * 1.5
+            minimum_distance_threshold =  minimum_distance_threshold_default if  minimum_distance_threshold < 0 else  minimum_distance_threshold
+        except:
+            minimum_distance_threshold =  minimum_distance_threshold_default
         
         prev_coord = {"x1":0}
+
+        
         # loop through to plot
         for x1, y1, x2, y2, lines_merged, avg_length, distance in updated_new_coord:
             if avg_length > minimum_length_threshold and distance > minimum_distance_threshold:
@@ -285,35 +292,80 @@ class ReadLines:
 #        print (f"Selected num {selected_num/10} and index is {selected_index}")
         
         cropped_new_image = img[selected_index - 10:]
-        
-#        y = range(1, gray.shape[0]+1)
-#        fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=1, ncols=4,  figsize=(8, 3))
-#        fig, (ax3, ax4) = plt.subplots(nrows=1, ncols=2,  figsize=(8, 3))
+        '''        
+        y = range(1, gray.shape[0]+1)
+        fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=1, ncols=4,  figsize=(8, 3))
+        fig, (ax3, ax4) = plt.subplots(nrows=1, ncols=2,  figsize=(8, 3))
 
-#        ax1.imshow(edges, cmap=plt.cm.hot)
-#        ax1.set_title('Edge Detection', fontsize=20)
+        ax1.imshow(edges, cmap=plt.cm.hot)
+        ax1.set_title('Edge Detection', fontsize=20)
         
-#        ax2.invert_yaxis()
-#        ax2.plot(edges_density, y)
-#        ax2.plot(cumulative_pixel_denst/10, y)
-#        ax2.set_title('Density of pixels', fontsize=20)
+        ax2.invert_yaxis()
+        ax2.plot(edges_density, y)
+        ax2.plot(cumulative_pixel_denst/10, y)
+        ax2.set_title('Density of pixels', fontsize=20)
         
-#        ax3.imshow(img, cmap=plt.cm.gray)
-#        ax3.set_title('Original Image', fontsize=20)
-#        
-#        ax4.imshow(cropped_new_image, cmap=plt.cm.gray)
-#        ax4.set_title('New Image', fontsize=20)
-#        
-#        fig.tight_layout()
+        ax3.imshow(img, cmap=plt.cm.gray)
+        ax3.set_title('Original Image', fontsize=20)
         
-#        plt.show()
+        ax4.imshow(cropped_new_image, cmap=plt.cm.gray)
+        ax4.set_title('New Image', fontsize=20)
         
-#        plt.imshow(cropped_new_image)
-#        plt.show()
+        fig.tight_layout()
         
+        plt.show()
+        
+        plt.imshow(cropped_new_image)
+        plt.show()
+        '''        
         ''' HOW TO CROP THE IMAGE INTO LETTERS '''
         images_for_prediction = self.DetectLettersInImages(None, cropped_new_image)
         return images_for_prediction
+#        return cropped_new_image
+
+    def clipped_zoom(self, img, zoom_factor, **kwargs):
+    
+        h, w = img.shape[:2]
+    
+        # For multichannel images we don't want to apply the zoom factor to the RGB
+        # dimension, so instead we create a tuple of zoom factors, one per array
+        # dimension, with 1's for any trailing dimensions after the width and height.
+        zoom_tuple = (zoom_factor,) * 2 + (1,) * (img.ndim - 2)
+    
+        # Zooming out
+        if zoom_factor < 1:
+    
+            # Bounding box of the zoomed-out image within the output array
+            zh = int(np.round(h * zoom_factor))
+            zw = int(np.round(w * zoom_factor))
+            top = (h - zh) // 2
+            left = (w - zw) // 2
+    
+            # Zero-padding
+            out = np.zeros_like(img)
+            out[top:top+zh, left:left+zw] = zoom(img, zoom_tuple, **kwargs)
+    
+        # Zooming in
+        elif zoom_factor > 1:
+    
+            # Bounding box of the zoomed-in region within the input array
+            zh = int(np.round(h / zoom_factor))
+            zw = int(np.round(w / zoom_factor))
+            top = (h - zh) // 2
+            left = (w - zw) // 2
+    
+            out = zoom(img[top:top+zh, left:left+zw], zoom_tuple, **kwargs)
+    
+            # `out` might still be slightly larger than `img` due to rounding, so
+            # trim off any extra pixels at the edges
+            trim_top = ((out.shape[0] - h) // 2)
+            trim_left = ((out.shape[1] - w) // 2)
+            out = out[trim_top:trim_top+h, trim_left:trim_left+w]
+    
+        # If zoom_factor == 1, just return the input array
+        else:
+            out = img
+        return out
 
 
     ''' ANALYZE THE VERTICAL EDGES AND SPLIT THE IMAGE INTO TEXT - IDENTIFY CONTOURS'''
@@ -393,7 +445,7 @@ class ReadLines:
                        pre_image = 255 - gray[5:y - 10, start_x - 1:end_x + 1]
                        height, width = pre_image.shape
                        size = height if height > width else width
-                       size = destination_image_size if size < destination_image_size else destination_image_size*int(size/destination_image_size + 1)
+                       size = destination_image_size if size <= destination_image_size else destination_image_size*int(size/destination_image_size + 1)
                        
                        padding_top = int((size - height) / 2)
                        padding_bottom = size - height - padding_top
@@ -420,7 +472,9 @@ class ReadLines:
 #                       (np.array(fit_and_resized_image),255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,22,2)
 #                       _, fit_and_resized_image  = cv2.threshold(np.array(fit_and_resized_image),150,255,cv2.THRESH_BINARY)
 
-                       images_for_prediction.append(fit_and_resized_image)
+                       zoomed_img = self.clipped_zoom(np.array(fit_and_resized_image), 1.5)
+                       images_for_prediction.append(zoomed_img)
+#                       images_for_prediction.append(fit_and_resized_image)
                    analyzing = False
 
                end_x = -1
@@ -437,7 +491,7 @@ class ReadLines:
         y = range(1, gray.shape[1]+1)
         
 #        fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3,  figsize=(8, 3))
-        fig, (ax2, ax3, ax4) = plt.subplots(nrows=3, ncols=1,  figsize=(100, 30))
+        fig, (ax2, ax3, ax4) = plt.subplots(nrows=3, ncols=1,  figsize=(8, 3))
 
 #        ax1.imshow(edges, cmap=plt.cm.hot)
 #        ax1.set_title('Edge Detection', fontsize=20)
@@ -465,10 +519,10 @@ if __name__ == "__main__":
     
 #    img_array = ['Images/TestSheet2_Section1.jpg', 'Images/TestSheet2_Section2.jpg', 'Images/TestSheet2_Section3.jpg','Images/TestSheet2_Section4.jpg','Images/TestSheet2_Section5.jpg',
 #                 'Images/TestSheet2_Section1.jpg', 'Images/TestSheet2_Section2.jpg', 'Images/TestSheet2_Section3.jpg','Images/TestSheet2_Section4.jpg','Images/TestSheet2_Section5.jpg']
-    img_array = ['Images/TestSheet2_Section1_SubSection1.jpg', 'Images/TestSheet2_Section1_SubSection2.jpg', 'Images/TestSheet2_Section1_SubSection3.jpg', 'Images/TestSheet2_Section1_SubSection4.jpg', 'Images/TestSheet2_Section1_SubSection5.jpg']
+#    img_array = ['Images/TestSheet2_Section1_SubSection1.jpg', 'Images/TestSheet2_Section1_SubSection2.jpg', 'Images/TestSheet2_Section1_SubSection3.jpg', 'Images/TestSheet2_Section1_SubSection4.jpg', 'Images/TestSheet2_Section1_SubSection5.jpg']
 #    img_array = ['Images/TestSheet1_Section1_SubSection1.jpg', 'Images/TestSheet1_Section1_SubSection2.jpg', 'Images/TestSheet1_Section1_SubSection3.jpg', 'Images/TestSheet1_Section1_SubSection4.jpg', 'Images/TestSheet1_Section1_SubSection5.jpg']
 
-#    img_array = ['Images/TestSheet2_Section1_SubSection1.jpg']
+    img_array = ['Images/TestSheet2_Section1_SubSection2.jpg', 'Images/TestSheet2_Section1_SubSection6.jpg']
 
     for img_name in img_array:
 #        img_withEdges, img_org, lines = readLineObj.DetectEdgesAndLines(img_name, None)

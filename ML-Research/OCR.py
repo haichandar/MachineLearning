@@ -12,60 +12,45 @@ import copy
 from ReadLines import ReadLines
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from scipy.ndimage import zoom
+from keras.preprocessing.image import ImageDataGenerator
+from keras.models import model_from_json
 
 sys.path.insert(0, '..\DeepLearning')
 from cnn import cnn
 
 readLineObj = ReadLines()
-img = cv2.imread("C:\\Users\\chandar_s\\Pictures\\TestSheet2.tif")
-FileName = "TestSheet2"
+#img = cv2.imread("C:\\Users\\chandar_s\\Pictures\\TestSheet1.tif")
+img = cv2.imread("C:\\Users\\chandar_s\\Pictures\\School1.jpeg")
+FileName = "SchoolData"
 
 
-def clipped_zoom(img, zoom_factor, **kwargs):
 
-    h, w = img.shape[:2]
+def loadInceptionModel():
+    # load json and create model
+    json_file = open('E:\\MLData\\Savedmodel\\inception\\alpha_numeric\\inception_model.json', 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    loaded_model = model_from_json(loaded_model_json)
+    # load weights into new model
+    loaded_model.load_weights("E:\\MLData\\Savedmodel\\inception\\alpha_numeric\\inception_model.h5")
+    print("Loaded model from disk")
+    return loaded_model
 
-    # For multichannel images we don't want to apply the zoom factor to the RGB
-    # dimension, so instead we create a tuple of zoom factors, one per array
-    # dimension, with 1's for any trailing dimensions after the width and height.
-    zoom_tuple = (zoom_factor,) * 2 + (1,) * (img.ndim - 2)
+loaded_model =  loadInceptionModel ()
+def PredictImagesUsingInceptionModel(X_test):
 
-    # Zooming out
-    if zoom_factor < 1:
+#    X_test = X_test.reshape(-1, X_test.shape[1], X_test.shape[2], 1)
+    X_test = X_test[:, :, :, np.newaxis]
 
-        # Bounding box of the zoomed-out image within the output array
-        zh = int(np.round(h * zoom_factor))
-        zw = int(np.round(w * zoom_factor))
-        top = (h - zh) // 2
-        left = (w - zw) // 2
+    generator = ImageDataGenerator(featurewise_center=True, 
+                                   featurewise_std_normalization=True,
+                                   zoom_range=0.0)
+    generator.fit(X_test)
 
-        # Zero-padding
-        out = np.zeros_like(img)
-        out[top:top+zh, left:left+zw] = zoom(img, zoom_tuple, **kwargs)
+    batchsize = 1
+    predicted_confidence = loaded_model.predict_generator(generator.flow(X_test, batch_size=batchsize, shuffle=False, seed=1), steps=len(X_test)//batchsize)
 
-    # Zooming in
-    elif zoom_factor > 1:
-
-        # Bounding box of the zoomed-in region within the input array
-        zh = int(np.round(h / zoom_factor))
-        zw = int(np.round(w / zoom_factor))
-        top = (h - zh) // 2
-        left = (w - zw) // 2
-
-        out = zoom(img[top:top+zh, left:left+zw], zoom_tuple, **kwargs)
-
-        # `out` might still be slightly larger than `img` due to rounding, so
-        # trim off any extra pixels at the edges
-        trim_top = ((out.shape[0] - h) // 2)
-        trim_left = ((out.shape[1] - w) // 2)
-        out = out[trim_top:trim_top+h, trim_left:trim_left+w]
-
-    # If zoom_factor == 1, just return the input array
-    else:
-        out = img
-    return out
-
+    return np.argmax(predicted_confidence[0], axis=1), np.amax(predicted_confidence[0]*100, axis=1)
 
 def PredictImages(x_test):
     # convert list to ndarray and PREP AS PER INPUT FORMAT
@@ -194,29 +179,31 @@ for w_current in range(w_start, width, w_step_size) :
                     images_for_analysis = readLineObj.AnalyzeAndCropImages(None, cropped_horizondal_image)
                     
                     ''' BEGIN: PREDICT AND DISPLAY RESULTS '''
-                    if len(images_for_analysis) > 0:
-#                        print (images_for_analysis[0])
-                        predicted_output, predicted_confidence = PredictImages(images_for_analysis)
 
+                    if len(images_for_analysis) > 0 :
+                        print (images_for_analysis.shape)
+#                        predicted_output, predicted_confidence = PredictImages(images_for_analysis)
+                        predicted_output, predicted_confidence = PredictImagesUsingInceptionModel(images_for_analysis)
                         cols_count = int(len(images_for_analysis)/2) + (len(images_for_analysis) - int(len(images_for_analysis)/2)*2)
                     
                         f, a = plt.subplots(nrows=2, ncols=cols_count, figsize=(8, 3),
                                                         sharex=True, sharey=True, squeeze=False)
                         img_nbr = 0
                         i = 0
+                        count = 0
                         for image in images_for_analysis:
-                            a[i][img_nbr].imshow(image, cmap=plt.cm.gray)
+                            a[i][img_nbr].imshow(image)
                             a[i][img_nbr].axis('off')
                     
-                            title = str(alphadigit[predicted_output[img_nbr]]) + " (" + str(int(predicted_confidence[img_nbr])) + "%)"
-                            a[i][img_nbr].set_title(title, fontsize=5)
-                            cv2.imwrite( f"E://MLData//Test//GeneratedLetters//{FileName}_Section{image_count}_SubSection{image_Vsection_count}_Image{img_nbr}_prediction{str(alphadigit[predicted_output[img_nbr]])}.jpg", clipped_zoom(image, 1.5))
+#                            title = alphadigit[predicted_output[count]] + " (" + str(int(predicted_confidence[count])) + "%)"
+                            title = alphadigit[predicted_output[count]]
+                            cv2.imwrite( f"E://MLData//Test//GeneratedLetters//{FileName}_Section{image_count}_SubSection{image_Vsection_count}_Image{count}_prediction{str(alphadigit[predicted_output[count]])}.jpg", readLineObj.clipped_zoom(image, 1.5))
+#                            cv2.imwrite( f"E://MLData//Test//GeneratedLetters//{FileName}_Section{image_count}_SubSection{image_Vsection_count}_Image{count}_prediction{str(alphadigit[predicted_output[count]])}.jpg", image)
 
-                            if (predicted_confidence[img_nbr] > 70):
-                                a[i][img_nbr].set_facecolor('xkcd:mint green')
-                            else:
-                                a[i][img_nbr].set_facecolor('xkcd:salmon')
+                            a[i][img_nbr].set_title(title, fontsize=10, color= "g" if (predicted_confidence[count] > 70) else "r")
+
                             img_nbr += 1
+                            count += 1
                     
                             ''' New row'''
                             if (img_nbr == cols_count):
