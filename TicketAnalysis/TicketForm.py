@@ -24,16 +24,19 @@ from tkinter import filedialog
 from sklearn import model_selection, metrics, linear_model, naive_bayes, svm, ensemble, decomposition
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.cluster import KMeans
+#from sklearn.cluster import KMeans
 from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import TruncatedSVD
 import xgboost
 from keras.preprocessing import text, sequence
 from keras import layers, models, optimizers
 
+from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 
+import nltk
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.cluster import KMeansClusterer
 import re
 
 class mclass:
@@ -268,32 +271,15 @@ class mclass:
 
 #%%
     def PerformClustering(self, training_corpus):        
-
-        '''        
-        # create a tokenizer 
-        token = text.Tokenizer()
-        token.fit_on_texts(training_corpus)
-        word_index = token.word_index
-        
-        # create token-embedding mapping
-        embedding_matrix = np.zeros((len(word_index) + 1, 50))
-        for word, i in word_index.items():
-            embedding_vector = self.embeddings_index.get(word)
-            if embedding_vector is not None:
-                embedding_matrix[i] = embedding_vector
-        '''
-        
-        from gensim.models.doc2vec import Doc2Vec, TaggedDocument
-        
+                
         # Train the doc to Vector model using training corpus
         Vector_dimensions  = 300
         documents = [TaggedDocument(doc, [i]) for i, doc in enumerate(training_corpus)]
-#        model = Doc2Vec(documents, vector_size=Vector_dimensions, window=2, min_count=1, workers=4)
-        model = Doc2Vec(size=Vector_dimensions, dbow_words= 1, dm=0, iter=1,  window=5, seed=1337, min_count=5, workers=4,alpha=0.025, min_alpha=0.025)
+        model = Doc2Vec(vector_size=Vector_dimensions, dbow_words= 1, dm=0, epochs=1,  window=5, seed=1337, min_count=5, workers=4,alpha=0.025, min_alpha=0.025)
         model.build_vocab(documents)
         doc_count = len(training_corpus)
         for epoch in range(10):
-            print("epoch "+str(epoch))
+            print("DocToVec: Training epoch "+str(epoch))
             model.train(documents, total_examples=doc_count, epochs=1)
             model.alpha -= 0.002  # decrease the learning rate
             model.min_alpha = model.alpha  # fix the learning rate, no decay
@@ -310,23 +296,14 @@ class mclass:
             i += 1
 
         # Use the doc2Vec data to do unsupervised clustering
-        k_optimal = 30
+        k_optimal = 20
         print ("clusters chosen "+ str(k_optimal))
         
         # FIRST DO UNSUPERVISED CLUSTERING ON TEXT USING KMeans - Cosine distance instead of euclidian distance
-        from nltk.cluster import KMeansClusterer
-        import nltk
         kclusterer = KMeansClusterer(k_optimal, distance=nltk.cluster.util.cosine_distance, repeats=25, avoid_empty_clusters=True)
         clusters = kclusterer.cluster(embedding_matrix, assign_clusters=True)
         cluster_labels = np.asarray(clusters)
-        
-        '''        
-        modelkmeans = KMeans(n_clusters=k_optimal, init='k-means++', precompute_distances=True)
-        modelkmeans.fit(embedding_matrix)
-        cluster_labels = modelkmeans.labels_
-        clusters = cluster_labels.tolist()
-        '''
-        
+                
         svd = TruncatedSVD(n_components=2, n_iter=7, random_state=42)
         svd.fit(embedding_matrix)
         svd_2d = svd.transform(embedding_matrix)
@@ -377,7 +354,7 @@ class mclass:
         rc('figure', figsize=(15, 4))
         fig2 = pl.figure('K-means with ' + str(k_optimal) + ' clusters',)
         fig2.clf()
-        pl.scatter(svd_2d[:, 0], svd_2d[:, 1], c=cluster_labels, alpha=0.2, cmap='viridis')
+        pl.scatter(svd_2d[:, 0], svd_2d[:, 1], c=cluster_labels, alpha=0.2, cmap='prism')
         pl.title("Ticket similarities in 2D view. Each circle is a ticket")
         
         canvas = FigureCanvasTkAgg(fig2, master=self.window)
